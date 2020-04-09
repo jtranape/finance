@@ -47,19 +47,19 @@ Result for NYSE:
 
 Description:
 The algorithm calculates the cost of debt and of equity based on the financial data of the company. 
-Given the leverage ratio, it calculates the cost of capital.
+Given the leverage ratio, it calculates the cost of capital.  
 Using supervised machine-learning to forecast revenues and cost of good sold, we forecast the free-cash flow and discount them 
-with the cost of capital.
+with the cost of capital.  
 The result is the enterprise value, if we divide it by the number of shares outstanding, we should estimate the share value.
 
 Known limitation:
 -cost of debt: Currently, we use a very simplistic approach and don't distinguish between long term and short term debt.
-We also use synthetic rating because we don't have credit rating information (Moody, Fitch, S&P)
--Tax rate: some company have negative tax rate which doesn't make sense in the long run. 
+We also use synthetic rating because we don't have credit rating information (Moody, Fitch, S&P)  
+-Tax rate: some company have negative tax rate which doesn't make sense in the long run.     
 -Forecast: we assume that depreciation and amortisation are proportional to sales and capex remains the same. 
-This is of course wrong and would need more accurate forecast.
--Many assumptions are made (debt maturity, lifespan of the company...). It would be interesting to do a sensitivity analysis.
+This is of course wrong and would need more accurate forecast.  
+-Many assumptions are made (debt maturity, lifespan of the company...). It would be interesting to do a sensitivity analysis.  
 -Business model: we only model company buying and selling goods. This might be more appropriate for reseller or industrial companies.
 However, we don't model business model including R&D, for instance tech companies. 
-Therefore, the result of the valuation for this kind of company would be inaccurate.
--Commodity price: some companies, for instance in the oil and gas industry are more profitable when the price of the commodity is high, for instance oil. This is not included in the model.
+Therefore, the result of the valuation for this kind of company would be inaccurate.  
+-Commodity price: some companies, for instance in the oil and gas industry are more profitable when the price of the commodity is high, for instance oil. This is not included in the model.  

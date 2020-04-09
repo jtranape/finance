@@ -61,3 +61,4 @@ This is of course wrong and would need more accurate forecast.
 -Business model: we only model company buying and selling goods. This might be more appropriate for reseller or industrial companies.
 However, we don't model business model including R&D, for instance tech companies. 
 Therefore, the result of the valuation for this kind of company would be inaccurate.
+-Commodity price: some companies, for instance in the oil and gas industry are more profitable when the price of the commodity is high, for instance oil. This is not included in the model.

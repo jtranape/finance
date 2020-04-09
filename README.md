@@ -18,28 +18,29 @@ reports and especially the footnotes.
 
 Result for NYSE:
 
+
 |	Ticker	|	Company	|	Sector	|	Industry	|	Cost of Debt	|	Cost of Equity	|	Cost of Capital	|	beta	|	Beta is fallback	|	taxrate	|	Entreprise Value	|	Share Value	|	Share Price	|	Potential Gain/Loss	|
 |	:-------------	|	:----------:	|	:----------:	|	:----------:	|	:----------:	|	:----------:	|	:----------:	|	:----------:	|	:----------:	|	:----------:	|	:----------:	|	:----------:	|	:----------:	|	-----------:	|
-|	DD	|	E. I. du Pont de Nemours and Company	|	Basic Materials	|	Chemicals	|	0.15	|	0.09	|	1.14	|	0.89	|	FALSE	|	0.61	|	9.51E+07	|	128.78	|	37.55	|	2.43	|
-|	DOW	|	The Dow Chemical Company	|	Basic Materials	|	Chemicals	|	0.14	|	0.07	|	1.2	|	1.29	|	FALSE	|	0.82	|	3.17E+07	|	42.63	|	32.76	|	0.3	|
-|	DIS	|	The Walt Disney Company	|	Communication Services	|	Entertainment	|	0.02	|	0.06	|	0.92	|	0.65	|	FALSE	|	0.07	|	5.32E+08	|	293.7	|	104.86	|	1.8	|
-|	MCD	|	McDonald's Corp.	|	Consumer Cyclical	|	Restaurants	|	0.02	|	0.05	|	0.81	|	0.53	|	FALSE	|	0.13	|	1.22E+08	|	161.37	|	184.53	|	-0.13	|
-|	KO	|	The Coca-Cola Company	|	Consumer Defensive	|	Beverages—Non-Alcoholic	|	0.02	|	0.04	|	0.62	|	0.38	|	FALSE	|	0.1	|	1.76E+08	|	40.96	|	48.5	|	-0.16	|
-|	WMT	|	Wal-Mart Stores Inc.	|	Consumer Defensive	|	Discount Stores	|	0.02	|	0.04	|	0.58	|	-0.11	|	FALSE	|	0.15	|	-1.17E+08	|	-41.37	|	123.98	|	-1.33	|
-|	PG	|	The Procter & Gamble Company	|	Consumer Defensive	|	Household & Personal Products	|	0.02	|	0.05	|	0.64	|	-0.09	|	FALSE	|	0.05	|	4.87E+08	|	197.02	|	116.71	|	0.69	|
-|	CVX	|	Chevron Corporation	|	Energy	|	Oil & Gas Integrated	|	0.02	|	0.07	|	1.18	|	0.9	|	FALSE	|	0.06	|	1.31E+09	|	695.13	|	84.26	|	7.25	|
-|	XOM	|	Exxon Mobil Corporation	|	Energy	|	Oil & Gas Integrated	|	0.02	|	0.05	|	0.93	|	0.81	|	FALSE	|	0.03	|	2.67E+09	|	631.01	|	42.9	|	13.71	|
-|	JPM	|	JPMorgan Chase & Co.	|	Financial Services	|	Banks—Diversified	|	0.07	|	0.05	|	1.2	|	0.86	|	FALSE	|	0.55	|	1.17E+08	|	38	|	94.45	|	-0.6	|
-|	WFC	|	Wells Fargo & Company	|	Financial Services	|	Banks—Diversified	|	0.09	|	0.04	|	1.16	|	0.87	|	FALSE	|	0.6	|	7.49E+08	|	183.17	|	30.75	|	4.96	|
-|	AXP	|	American Express Company	|	Financial Services	|	Credit Services	|	0.04	|	0.05	|	1.22	|	0.88	|	FALSE	|	0.37	|	2.20E+08	|	272.97	|	91.43	|	1.99	|
-|	JNJ	|	Johnson & Johnson	|	Healthcare	|	Drug Manufacturers—General	|	0.02	|	0.05	|	0.68	|	0.32	|	FALSE	|	0.04	|	5.32E+08	|	201.53	|	139.86	|	0.44	|
-|	MRK	|	Merck & Co. Inc.	|	Healthcare	|	Drug Manufacturers—General	|	0.02	|	0.05	|	0.71	|	0.37	|	FALSE	|	0.09	|	1.93E+08	|	75.64	|	81.68	|	-0.07	|
-|	BA	|	The Boeing Company	|	Industrials	|	Aerospace & Defense	|	0.15	|	0.13	|	1.48	|	1.39	|	FALSE	|	0.13	|	3.96E+08	|	702.52	|	162	|	3.34	|
-|	GE	|	General Electric Company	|	Industrials	|	Specialty Industrial Machinery	|	0.12	|	0.13	|	1.09	|	0.9	|	FALSE	|	-0.25	|	6.08E+08	|	69.86	|	7.69	|	8.08	|
-|	MMM	|	3M Company	|	Industrials	|	Specialty Industrial Machinery	|	0.02	|	0.06	|	0.89	|	0.55	|	FALSE	|	0.06	|	2.17E+08	|	377.41	|	147.5	|	1.56	|
-|	HPQ	|	Hewlett-Packard Company	|	Technology	|	Computer Hardware	|	0.02	|	0.05	|	1.12	|	1.09	|	FALSE	|	0.1	|	5.61E+08	|	392.43	|	15.7	|	24	|
-|	IBM	|	International Business Machines Corporation	|	Technology	|	Information Technology Services	|	0.02	|	0.05	|	0.95	|	0.74	|	FALSE	|	0.09	|	4.88E+08	|	549.1	|	118.8	|	3.62	|
-|	MSFT	|	Microsoft Corporation	|	Technology	|	Software—Infrastructure	|	0.02	|	0.09	|	1.12	|	0.62	|	FALSE	|	0.07	|	1.05E+09	|	138.02	|	169.59	|	-0.19	|
+|	DD	|	E. I. du Pont de Nemours and Company	|	Basic Materials	|	Chemicals	|	0.15	|	0.09	|	1.14	|	1.14	|	FALSE	|	0.61	|	9.51E+07	|	128.78	|	37.55	|	2.43	|
+|	DOW	|	The Dow Chemical Company	|	Basic Materials	|	Chemicals	|	0.14	|	0.07	|	1.2	|	1.2	|	FALSE	|	0.82	|	3.17E+07	|	42.63	|	32.76	|	0.3	|
+|	DIS	|	The Walt Disney Company	|	Communication Services	|	Entertainment	|	0.02	|	0.06	|	0.92	|	0.92	|	FALSE	|	0.07	|	5.32E+08	|	293.7	|	104.86	|	1.8	|
+|	MCD	|	McDonald's Corp.	|	Consumer Cyclical	|	Restaurants	|	0.02	|	0.05	|	0.81	|	0.81	|	FALSE	|	0.13	|	1.22E+08	|	161.37	|	184.53	|	-0.13	|
+|	KO	|	The Coca-Cola Company	|	Consumer Defensive	|	Beverages—Non-Alcoholic	|	0.02	|	0.04	|	0.62	|	0.62	|	FALSE	|	0.1	|	1.76E+08	|	40.96	|	48.5	|	-0.16	|
+|	WMT	|	Wal-Mart Stores Inc.	|	Consumer Defensive	|	Discount Stores	|	0.02	|	0.04	|	0.58	|	0.58	|	FALSE	|	0.15	|	-1.17E+08	|	-41.37	|	123.98	|	-1.33	|
+|	PG	|	The Procter & Gamble Company	|	Consumer Defensive	|	Household & Personal Products	|	0.02	|	0.05	|	0.64	|	0.64	|	FALSE	|	0.05	|	4.87E+08	|	197.02	|	116.71	|	0.69	|
+|	CVX	|	Chevron Corporation	|	Energy	|	Oil & Gas Integrated	|	0.02	|	0.07	|	1.18	|	1.18	|	FALSE	|	0.06	|	1.31E+09	|	695.13	|	84.26	|	7.25	|
+|	XOM	|	Exxon Mobil Corporation	|	Energy	|	Oil & Gas Integrated	|	0.02	|	0.05	|	0.93	|	0.93	|	FALSE	|	0.03	|	2.67E+09	|	631.01	|	42.9	|	13.71	|
+|	JPM	|	JPMorgan Chase & Co.	|	Financial Services	|	Banks—Diversified	|	0.07	|	0.05	|	1.2	|	1.2	|	FALSE	|	0.55	|	1.17E+08	|	38	|	94.45	|	-0.6	|
+|	WFC	|	Wells Fargo & Company	|	Financial Services	|	Banks—Diversified	|	0.09	|	0.04	|	1.16	|	1.16	|	FALSE	|	0.6	|	7.49E+08	|	183.17	|	30.75	|	4.96	|
+|	AXP	|	American Express Company	|	Financial Services	|	Credit Services	|	0.04	|	0.05	|	1.22	|	1.22	|	FALSE	|	0.37	|	2.20E+08	|	272.97	|	91.43	|	1.99	|
+|	JNJ	|	Johnson & Johnson	|	Healthcare	|	Drug Manufacturers—General	|	0.02	|	0.05	|	0.68	|	0.68	|	FALSE	|	0.04	|	5.32E+08	|	201.53	|	139.86	|	0.44	|
+|	MRK	|	Merck & Co. Inc.	|	Healthcare	|	Drug Manufacturers—General	|	0.02	|	0.05	|	0.71	|	0.71	|	FALSE	|	0.09	|	1.93E+08	|	75.64	|	81.68	|	-0.07	|
+|	BA	|	The Boeing Company	|	Industrials	|	Aerospace & Defense	|	0.15	|	0.13	|	1.48	|	1.48	|	FALSE	|	0.13	|	3.96E+08	|	702.52	|	162	|	3.34	|
+|	GE	|	General Electric Company	|	Industrials	|	Specialty Industrial Machinery	|	0.12	|	0.13	|	1.09	|	1.09	|	FALSE	|	-0.25	|	6.08E+08	|	69.86	|	7.69	|	8.08	|
+|	MMM	|	3M Company	|	Industrials	|	Specialty Industrial Machinery	|	0.02	|	0.06	|	0.89	|	0.89	|	FALSE	|	0.06	|	2.17E+08	|	377.41	|	147.5	|	1.56	|
+|	HPQ	|	Hewlett-Packard Company	|	Technology	|	Computer Hardware	|	0.02	|	0.05	|	1.12	|	1.12	|	FALSE	|	0.1	|	5.61E+08	|	392.43	|	15.7	|	24	|
+|	IBM	|	International Business Machines Corporation	|	Technology	|	Information Technology Services	|	0.02	|	0.05	|	0.95	|	0.95	|	FALSE	|	0.09	|	4.88E+08	|	549.1	|	118.8	|	3.62	|
+|	MSFT	|	Microsoft Corporation	|	Technology	|	Software—Infrastructure	|	0.02	|	0.09	|	1.12	|	1.12	|	FALSE	|	0.07	|	1.05E+09	|	138.02	|	169.59	|	-0.19	|
 
 
 

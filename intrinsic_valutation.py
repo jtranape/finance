@@ -2,6 +2,7 @@
 import import_data
 import pandas as pd
 import numpy as np
+import datetime
 import statsmodels.api as sm
 from scipy.optimize import curve_fit
 #from statsmodels import regression
@@ -99,48 +100,62 @@ def	synthetic_rating(Interest_Coverage_Ratio, market_cap):
 
 	print("\nspread : "+ str(spread))
 	return spread
-def beta(index_data,stock_data,sample):									#index:x,stock:y, sample:'d','w','m','q'daily, weekly, monthly, quarterly
+def beta(index,stock):														#index:x,stock:y, sample:'d','w','m','q'daily, weekly, monthly, quarterly
 	#beta mesures the risk of the stock vs the market. The higher is beta, the riskier.
 	#To calculate beta, we use a regression analysis	
-	
-	df_index=index_data['Adj Close'].interpolate()						#if for some reason we don't have a value for a specific day, we want to interpolate it
-	df_stock=stock_data['Adj Close'].interpolate()	
-	#df_stock.index= pd.to_datetime(df_stock.index)
-	#df_index.index=pd.to_datetime(df_index.index)
-	#print(df_stock)
-	#print(df_index)
-	df_stock=df_stock.resample(sample).mean()							#we resample the data
-	df_index=df_index.resample(sample).mean()
-	np_stock=df_stock.pct_change().dropna().to_numpy()					#we compute also % of change to get return
-	np_index=df_index.pct_change().dropna().to_numpy()	
-	min_days=-min(len(np_index),len(np_stock))
-	np_index=np_index[min_days:]										#get the last days
-	np_stock=np_stock[min_days:]										#get the last days, this is more realistic because it can be that the stock was not traded for a day.
-	#print(np_index)
-	#print(np_stock)
-	plt.figure(figsize=(20,20))
-	plt.scatter(np_index,np_stock, alpha=.5)
-	np_index=sm.add_constant(np_index, has_constant='add')
-	model = sm.OLS(np_stock,np_index).fit()
-	print(model.summary())
+	df_index=index.historical_data['Adj Close']
+	df_stock=stock.historical_data['Adj Close']	
 
-	np_index=np_index[:,1]#remove the constant
+	df_index=df_index.interpolate()											#if for some reason we don't have a value for a specific day, we want to interpolate it
+	df_stock=df_stock.interpolate()	
 
-	#print(np_stock)
-	#print(np_index)
-	alpha=model.params[0]
-	beta=model.params[1]
-	p_value=model.f_pvalue
-	#print(model.params)
-	print(p_value)
-	print("alpha ="+ str(alpha) +" beta= "+str(beta))
-	x_model=np.linspace(np_index.min(),np_index.max(),2)
-	y_model=x_model*beta+alpha
+	samples=['D','W','2W','M','Q']											#we loop different samples to get the best model
+	p_value=10**10
+	for sample in samples:
 
-	plt.xlabel("index return")
-	plt.ylabel("stock return")
-	plt.plot(x_model,y_model, alpha=0.5)
-	plt.show()
+		df_stock=df_stock.resample(sample).mean()							#we resample the data
+		df_index=df_index.resample(sample).mean()
+		np_stock=df_stock.pct_change().dropna().to_numpy()					#we compute also % of change to get return
+		np_index=df_index.pct_change().dropna().to_numpy()	
+		min_days=-min(len(np_index),len(np_stock))
+		np_index=np_index[min_days:]										#get the last days
+		np_stock=np_stock[min_days:]										#get the last days, this is more realistic because it can be that the stock was not traded for a day.
+		plt.figure(figsize=(20,20))
+		plt.scatter(np_index,np_stock, alpha=.5)
+		np_index=sm.add_constant(np_index, has_constant='add')
+		model = sm.OLS(np_stock,np_index).fit()
+		print(model.summary())
+
+		np_index=np_index[:,1]												#remove the constant
+
+		print(model.f_pvalue)
+		if p_value > model.f_pvalue:										#the lower the p-value, the better
+			p_value=model.f_pvalue
+			#print(model.params)
+			alpha=model.params[0]
+			beta=model.params[1]
+			print("p_value : "+ str(p_value))
+
+			print("alpha ="+ str(alpha) +" beta= "+str(beta))
+			x_model=np.linspace(np_index.min(),np_index.max(),2)
+			y_model=x_model*beta+alpha
+
+			'''plt.xlabel("index return: "+ index.ticker)
+			plt.ylabel("stock return: "+ stock.ticker)
+			plt.title("Raw data and beta\np_value ="+ str(p_value) + "\nSampling : " + sample)
+			plt.plot(x_model,y_model, alpha=0.5)
+			plt.show(block=False)											#Show raw data and model
+			plt.pause(1)
+			plt.close()'''
+			s=sample
+	if p_value < 0.01:														#if p_value lower than 1%, the hypothesis is confirmed. Otherwise we use Yahoo's data as fallback
+		print("p_value : "+ str(p_value) +"\n We accept this model. \n Sample:" +s)
+	else:
+		print("p_value : "+ str(p_value) +"\n The model is not good enough, we use Yahoo data as fallback. Check if we used the right index data")
+		beta=stock.key_statistics.loc['Beta (5Y Monthly)'].values[0]
+		stock.beta_is_fallback=True
+	stock.beta=beta
+	print ("\nbeta=" + str(beta))
 	return beta
 
 def market_return(index_data):
@@ -158,22 +173,29 @@ def market_return(index_data):
 	print("Market return :" + str(market_return))
 	return market_return
 
-def costofequity(exchange, index_data, stock_data, sample):		#this can be calculated as the sum of dividend and buyback discounted
+def costofequity(exchange, index, stock):									#this can be calculated as the sum of dividend and buyback discounted
 	#E(R)=Rf+ β × [MR−Rf]
-	maturity=10													#we assume a maturity of 10 years, 5 years would give us a very low risk free rate
+	maturity=10																#we assume a maturity of 10 years, 5 years would give us a very low risk free rate
 	rf=import_data.riskfreerate(exchange, maturity)
-	β=beta(index_data,stock_data,sample)
-	MR=market_return(index_data)
+	β=beta(index,stock)
+	MR=market_return(index.historical_data)
 	print(rf)
 	print(β)
 	print(MR)
-	print(rf)
 	costofequity=rf+β*(MR-rf)
 	print("\nCost of equity =" + str(costofequity))
 	return costofequity
 
-def taxrate(financial_statement):
-	taxrate=financial_statement.loc['Interest Expense'].iat[0]/financial_statement.loc['Income Before Tax'].iat[0]
+def taxrate(financial_statement):																				
+	#using only value might be not accurate, therefore we can use a weithed average of last 4 year with higher weight for recent years
+	quarter=int(datetime.datetime.today().month/3)							#at the begining of the year, data for last year are the same as ttm data, therefore the weight for ttm depends on the quarter
+	taxrate=(financial_statement.loc['Interest Expense'].iat[0]*quarter
+		+financial_statement.loc['Interest Expense'].iat[1]*4
+		+financial_statement.loc['Interest Expense'].iat[2]*3
+		+financial_statement.loc['Interest Expense'].iat[3]*2)/(financial_statement.loc['Income Before Tax'].iat[0]*quarter
+		+financial_statement.loc['Income Before Tax'].iat[1]*4
+		+financial_statement.loc['Income Before Tax'].iat[2]*3
+		+financial_statement.loc['Income Before Tax'].iat[3]*2)
 	print("\nTax rate :" + str(taxrate))
 	return taxrate
 
@@ -198,13 +220,13 @@ def equity_market_value(summary):
 	equity_market_value=summary.loc['Market Cap'].iat[0]
 	return equity_market_value
 
-def	costofcapital(exchange, market_index, stock):
+def	costofcapital(exchange, index, stock):
 	#Weighted average cost of capital at market value (NOT book value because we are interested of the price as of today)
 	#Debt
 	ICO=stock.financial_statement.loc['Income Before Tax'].iat[0]/stock.financial_statement.loc['Interest Expense'].iat[0] 	#we compute interest coverage ration
 	Kd=costofdebt(ICO,stock.summary.loc['Market Cap'].iat[0], stock.ticker, 10)												#Interest_Coverage_Ratio, market_cap , Ticker, maturity
 	#Equity
-	Ke=costofequity(exchange, market_index.historical_data, stock.historical_data, 'W')										#exchange, index_data, stock_data, sample :'D', 'W', 'M'
+	Ke=costofequity(exchange, index, stock)										#exchange, index_data, stock_data, sample :'D', 'W', 'M'
 	E=equity_market_value(stock.summary)
 	D=debt_market_value(Kd,stock.financial_statement*1000, stock.balance_sheet*1000)										#*1000 because all numbers are in 1000
 	print("Equity value :" +str(E))
@@ -212,8 +234,11 @@ def	costofcapital(exchange, market_index, stock):
 	V=E+D
 	print("Debt ratio :" +str(D/V))
 	taxr=taxrate(stock.financial_statement)
+	stock.taxrate=taxr
 	WACC=E/V*Ke+D/V*Kd*(1-taxr)
-
+	stock.cost_of_capital=WACC
+	stock.cost_of_debt=Kd
+	stock.cost_of_equity=Ke
 	print("Weighted average cost of capital: " + str(WACC))
 	return WACC	
 def revenue_model(year, a, b, c):
@@ -227,7 +252,9 @@ def free_cash_flow(stock, WACC):
 	#http://www.streetofwalls.com/finance-training-courses/investment-banking-technical-training/discounted-cash-flow-analysis/
 	#https://corporatefinanceinstitute.com/resources/knowledge/valuation/dcf-formula-guide/
 	#https://www.wallstreetprep.com/knowledge/income-statement-forecasting/#Depreciation_and_amortization
-	columns=['year 0', 'year 1', 'year 2', 'year 3']
+	number_of_years=15
+	columns=["year "+ str(i) for i in range(number_of_years)]																#create header for forecast
+	#columns=['year 1', 'year 2', 'year 3', 'year 4', 'year 5', 'year 6', 'year 7', 'year 8', 'year 9', 'year 10', 'year 11', 'year 12', 'year 12', 'year 14', 'year 15']
 	index=['Total Revenue']
 	dfforecast=pd.DataFrame(index=index, columns=columns)	#create forecast line by line, we first forecast revenue, then operation margin...to calculate free cashflow
 
@@ -238,7 +265,8 @@ def free_cash_flow(stock, WACC):
 	year = [1,2,3,4]#np.linspace(0, 4, 50)		
 	popt, pcov = curve_fit(revenue_model, year, revenue)																	#reverse the order of the years
 	print(popt)
-	year_forecast=[5,6,7,8]
+	year_forecast=[i for i in range(5,5+number_of_years)]																			#create years for forecast
+	#year_forecast=[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
 	revenue_forecast=list()
 	for i in year_forecast:																									#we forecast the revenue with our model, using ttm as start value.
 		revenue_forecast.append(revenue_model(i,popt[0],popt[1],popt[2])+stock.financial_statement.loc['Total Revenue'].iat[0]-stock.financial_statement.loc['Total Revenue'].iat[1])
@@ -260,15 +288,18 @@ def free_cash_flow(stock, WACC):
 	dfforecast.loc['Total Revenue']=revenue_forecast
 	print(dfforecast)
 	#2)COGS (should decrease if Revenue increase: correl revenue and COGS)-->Economy of scale
-	gross_margin=stock.financial_statement.loc['Cost of Revenue'][-4:].values/stock.financial_statement.loc['Total Revenue'][-4:].values
-	gross_margin=np.flip(gross_margin)																										#reverse the order of the years
-	gross_margin=gross_margin.tolist()		
-	popt, pcov = curve_fit(gross_margin_model, revenue, gross_margin)
-	COGS_forecast=list()
-	for rev in revenue_forecast:
-		COGS_forecast.append(gross_margin_model(rev,popt[0],popt[1],popt[2])*rev)												#we forecast cost based on forecasted revenue
-	dfforecast.loc['- Cost of Revenue']=COGS_forecast
-	
+	try:
+		gross_margin=stock.financial_statement.loc['Cost of Revenue'][-4:].values/stock.financial_statement.loc['Total Revenue'][-4:].sort_values#we use last 4 years to build a model
+		gross_margin=np.flip(gross_margin)																										#reverse the order of the years
+		gross_margin=gross_margin.tolist()		
+		popt, pcov = curve_fit(gross_margin_model, revenue, gross_margin)
+		COGS_forecast=list()
+		for rev in revenue_forecast:
+			COGS_forecast.append(gross_margin_model(rev,popt[0],popt[1],popt[2])*rev)															#we forecast cost based on forecasted revenue
+		dfforecast.loc['- Cost of Revenue']=COGS_forecast
+	except:
+		print("\nno Cost of Revenue found")
+		dfforecast.loc['- Cost of Revenue']=0
 
 	#compute Gross profit
 	dfforecast.loc['= Gross Profit']=dfforecast.loc['Total Revenue']-dfforecast.loc['- Cost of Revenue']
@@ -282,8 +313,12 @@ def free_cash_flow(stock, WACC):
 		SGnA=(stock.financial_statement.loc['Selling General and Administrative']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
 	except:
 		SGnA=0
-	if RnD + SGnA==0:																											#This means that we don't have the breakdown for SGnA and RnD
-		TOE=(stock.financial_statement.loc['Total Operating Expenses']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
+	if RnD + SGnA==0:																															#This means that we don't have the breakdown for SGnA and RnD
+		try:
+			TOE=(stock.financial_statement.loc['Total Operating Expenses']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
+		except:
+			print("Could not find Total Operating Expenses")
+			TOE=0
 		dfforecast.loc['= Total Operating Expenses']=dfforecast.loc['Total Revenue']*TOE
 	else:
 		dfforecast.loc['- Research Development']=dfforecast.loc['Total Revenue']*RnD
@@ -297,6 +332,7 @@ def free_cash_flow(stock, WACC):
 	#5)-D&A
 	#we can go more fancy and forecast balance sheet and estimate D&A but for now let's assume D&A is proportional to salesand capex remains the same
 	#to estimate D&A we should recreate balance sheet with days sales outstanding, inventory turnover ratio, number of days payables
+	#https://www.wallstreetprep.com/knowledge/guide-balance-sheet-projections/
 	try:
 		DnA=(stock.cash_flow_statement.loc['Depreciation & amortization']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
 	except:
@@ -312,8 +348,13 @@ def free_cash_flow(stock, WACC):
 	dfforecast.loc['= Tax effected Ebit']=dfforecast.loc['= EBIT']-dfforecast.loc['- Tax']
 
 	#7)+D&A+netCAPEX (non-cash expenses)
+	#https://www.wallstreetoasis.com/forums/best-way-to-forecast-da-and-capex
 	dfforecast.loc['+ Depreciation & amortization']=DnA*dfforecast.loc['Total Revenue']
-	capex=stock.cash_flow_statement.loc['Capital Expenditure'].mean(axis=0)
+	try:
+		capex=stock.cash_flow_statement.loc['Capital Expenditure'].mean(axis=0)
+	except:
+		capex=0
+		print("Capital Expenditure not found")
 	dfforecast.loc['+ CAPEX']=capex
 
 	#8)netWorkingCapital
@@ -327,21 +368,25 @@ def free_cash_flow(stock, WACC):
 	#10)Terminal value
 	growth=dfforecast.loc['= Free Cash Flow'].pct_change().min()*1/2
 	#Gordon Formula: Terminal Value = FCFn × (1 + g) ÷ (r – g)
-	print (WACC)
-	print (growth)
+	#we could either use Gordon Formula or increase the number of years to calculate cashflow. It seems that the result of Gordon Terminal value highly depend on the expected growth and WACC. 
+	#Therefore we use 15 years discounted cashflow which is average lifespan of S&P500 companies
+	#https://www.bbc.com/news/business-16611040
+	#print(WACC)
+	#print (growth)
 	TV=dfforecast.loc['= Free Cash Flow'].iat[-1] * (1 + growth) / (WACC- growth)
-	print(TV)
+	#print(TV)
 	cashflow=dfforecast.loc['= Free Cash Flow'].tolist()#.append(TV)
-	print(cashflow)
-	cashflow.append(TV)
-	print(cashflow)
+	#print(cashflow)
+	#cashflow.append(TV)
+	#print(cashflow)
 	EV=np.npv(WACC,cashflow)/(1+WACC)
-	print(EV)
+	print("\n Entreprise value:"+ str(EV))
+	stock.entreprise_value=EV
 	return EV
 
 def main():
-	stock=import_data.company_data("TOT")
-	index=import_data.market_index("^FCHI")
+	
+	#index=import_data.market_index("^GDAXI")
 
 	#ICO=SAP.financial_statement.loc['Income Before Tax'].iat[0]/SAP.financial_statement.loc['Interest Expense'].iat[0]
 	#syntetic_rating(ICO,Total.summary.loc['Market Cap'].iat[0])
@@ -353,18 +398,166 @@ def main():
 	#print(market_return(DAX.historical_data))
 	#costofequity("EU",5,DAX.historical_data,SAP.historical_data,'M')
 	#taxrate(SAP.financial_statement)
-	WACC=costofcapital(get_exchange("TOT"), index, stock)
+	pd.set_option('precision', 2)																					#format float dataframe with 2 significant digits
+	
+	import_data.list_market_index()																						#initializes index data
+
+	df_result=pd.DataFrame(index=[],columns=[
+		'Sector', 'Industry', 'Cost of Debt',
+		'Cost of Equity','Cost of Capital', 'beta', 
+		'Beta is fallback', 'taxrate', 'Entreprise Value', 
+		'Share Value', 'Share Price', 'Potential Gain/Loss'
+		])
+	index=import_data.market_index("^DJI")																				#Dow Jones
+
+	
+	for row in import_data.NYSE_Arca_Major_Market_Index.iterrows():
+		try:
+			stock=import_data.company_data(row[1][1])
+			WACC=costofcapital(get_exchange(index.ticker), index, stock)
+			EV=free_cash_flow(stock,WACC)*1000
+			share_value=EV/stock.shares_outstanding
+			stock.potential_gain_loss=(share_value-stock.price)/stock.price
+			df_result.loc[stock.ticker]=[
+				stock.profile[0], stock.profile[1], stock.cost_of_debt, 
+				stock.cost_of_equity, stock.cost_of_capital, stock.beta, 
+				stock.beta_is_fallback, stock.taxrate, stock.entreprise_value, 
+				share_value, stock.price, stock.potential_gain_loss
+				]
+		except:
+			print("Impossible to value " + row[1][1])
+	
+	
+	index=import_data.market_index("^GSPC")																				#S&P500
+	for row in import_data.List_of_SP_500_companies.iterrows():
+		try: 
+			stock=import_data.company_data(row[1][1])
+			WACC=costofcapital(get_exchange(index.ticker), index, stock)
+			EV=free_cash_flow(stock,WACC)*1000
+			share_value=EV/stock.shares_outstanding
+			stock.potential_gain_loss=(share_value-stock.price)/stock.price
+			df_result.loc[stock.ticker]=[
+			stock.profile[0], stock.profile[1], stock.cost_of_debt,
+			stock.cost_of_equity, stock.cost_of_capital, stock.beta,
+			stock.beta_is_fallback, stock.taxrate, stock.entreprise_value,
+			share_value, stock.price, stock.potential_gain_loss
+			]
+		except:
+			print("Impossible to value " + row[1][1])
+	print(df_result.sort_values(by=['Sector', 'Industry']))
+	
+	index=import_data.market_index("^IXIC")																				#NASDAQ Composite
+	for row in import_data.NASDAQ_100.iterrows():
+		try:
+			stock=import_data.company_data(row[1][1])
+			WACC=costofcapital(get_exchange(index.ticker), index, stock)
+			EV=free_cash_flow(stock,WACC)*1000
+			share_value=EV/stock.shares_outstanding
+			stock.potential_gain_loss=(share_value-stock.price)/stock.price
+			df_result.loc[stock.ticker]=[
+			stock.profile[0], stock.profile[1], stock.cost_of_debt, 
+			stock.cost_of_equity, stock.cost_of_capital, stock.beta, 
+			stock.beta_is_fallback, stock.taxrate, stock.entreprise_value, 
+			share_value, stock.price, stock.potential_gain_loss
+			]
+		except:
+			print("Impossible to value " + row[1][1])
+	print(df_result.sort_values(by=['Sector', 'Industry']))
+
+
+	index=import_data.market_index("^FCHI")																				#CAC40
+	for row in import_data.CAC_40.iterrows():
+		try:
+			stock=import_data.company_data(row[1][1])
+			WACC=costofcapital(get_exchange(index.ticker), index, stock)
+			EV=free_cash_flow(stock,WACC)*1000
+			share_value=EV/stock.shares_outstanding
+			stock.potential_gain_loss=(share_value-stock.price)/stock.price
+			df_result.loc[stock.ticker]=[
+			stock.profile[0], stock.profile[1], stock.cost_of_debt, 
+			stock.cost_of_equity, stock.cost_of_capital, stock.beta,
+			stock.beta_is_fallback, stock.taxrate, stock.entreprise_value, 
+			share_value, stock.price, stock.potential_gain_loss
+			]
+		except:
+			print("Impossible to value " + row[1][1])
+	print(df_result.sort_values(by=['Sector', 'Industry']))
+	
+	index=import_data.market_index("^GDAXI")																			#DAX
+	for row in import_data.DAX.iterrows():
+		try:
+			stock=import_data.company_data(row[1][1])
+			WACC=costofcapital(get_exchange(index.ticker), index, stock)
+			EV=free_cash_flow(stock,WACC)*1000
+			share_value=EV/stock.shares_outstanding
+			stock.potential_gain_loss=(share_value-stock.price)/stock.price
+			df_result.loc[stock.ticker]=[
+			stock.profile[0], stock.profile[1], stock.cost_of_debt, 
+			stock.cost_of_equity, stock.cost_of_capital, stock.beta, 
+			stock.beta_is_fallback,stock.taxrate, stock.entreprise_value, 
+			share_value, stock.price, stock.potential_gain_loss
+			]
+		except:
+			print("Impossible to value " + row[1][1])
+	print(df_result.sort_values(by=['Sector', 'Industry']))
 	
 
-	EV=free_cash_flow(stock,WACC)*1000
-	share_outstanding=stock.key_statistics.loc['Shares Outstanding 5'].values
-	share_outstanding[0]=share_outstanding[0].replace("M","*1000000")	#Convert million
-	share_outstanding[0]=share_outstanding[0].replace("B","*1000000000")	#Convert billion
-	print(share_outstanding)
-	share_price=EV/pd.eval(share_outstanding)
-	print(share_price)
-	print(stock.financial_statement)
-	print(stock.cash_flow_statement)
+	index=import_data.market_index("UKXNUK.L")																			#FTSE
+	for row in import_data.FTSE_100_Index.iterrows():
+		try:
+			stock=import_data.company_data(row[1][1])
+			WACC=costofcapital(get_exchange(index.ticker), index, stock)
+			EV=free_cash_flow(stock,WACC)*1000
+			share_value=EV/stock.shares_outstanding
+			stock.potential_gain_loss=(share_value-stock.price)/stock.price
+			df_result.loc[stock.ticker]=[
+			stock.profile[0], stock.profile[1], stock.cost_of_debt, 
+			stock.cost_of_equity, stock.cost_of_capital, stock.beta, 
+			stock.beta_is_fallback, stock.taxrate, stock.entreprise_value, 
+			share_value, stock.price, stock.potential_gain_loss
+			]
+		except:
+			print("Impossible to value " + row[1][1])
+	print(df_result.sort_values(by=['Sector', 'Industry']))
+	
+	index=import_data.market_index("^RUT")																				#Russell_1000_Index
+	for row in import_data.Russell_1000_Index.iterrows():
+		try:
+			stock=import_data.company_data(row[1][1])
+			WACC=costofcapital(get_exchange(index.ticker), index, stock)
+			EV=free_cash_flow(stock,WACC)*1000
+			share_value=EV/stock.shares_outstanding
+			stock.potential_gain_loss=(share_value-stock.price)/stock.price
+			df_result.loc[stock.ticker]=[
+			stock.profile[0], stock.profile[1], stock.cost_of_debt, 
+			stock.cost_of_equity, stock.cost_of_capital, stock.beta, 
+			stock.beta_is_fallback, stock.taxrate, stock.entreprise_value, 
+			share_value, stock.price, stock.potential_gain_loss
+			]
+		except:
+			print("Impossible to value " + row[1][1])
+	print(df_result.sort_values(by=['Sector', 'Industry']))
 
+	print("\nResult for NYSE:")
+	print(import_data.NYSE_Arca_Major_Market_Index.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
+
+	print("\nResult for S&P500:")
+	print(import_data.List_of_SP_500_companies.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))	
+	
+	print("\nResult for NASDAQ Composite:")
+	print(import_data.NASDAQ_100.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
+
+	print("\nResult for CAC40:")
+	print(import_data.CAC_40.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
+
+	print("\nResult for DAX:")
+	print(import_data.DAX.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
+
+	print("\nResult for FTSE:")
+	print(import_data.FTSE_100_Index.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
+
+	print("\nResult for Russell 1000 Index:")
+	print(import_data.Russell_1000_Index.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
+	
 if __name__ == "__main__":
 	main()

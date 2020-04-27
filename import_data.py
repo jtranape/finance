@@ -1,563 +1,397 @@
-#valuation of the business based on own performance and expected cashflow as opposed to multiple valuation
-import import_data
+#This import financial data from divers sources and save them as pickle. If the data are not uptodate anymore, all you need is to delete them so that they will be updated
+
+import array
+import requests
 import pandas as pd
-import numpy as np
+import time
 import datetime
-import statsmodels.api as sm
-from scipy.optimize import curve_fit
-#from statsmodels import regression
-#from sklearn.preprocessing import PolynomialFeatures
-#from sklearn import linear_model
-import matplotlib.pyplot as plt
+import random
+import bs4 as bs
+from selenium import webdriver
+import io
 
-def get_exchange(Ticker):
-	index=import_data.get_index(Ticker) 
-	if (index=="NYSE_Arca_Major_Market_Index" or
-		index=="List_of_S%26P_500_companies" or
-		index=="NASDAQ-100" or
-		index== "Russell_1000_Index"):
-		region="US"
-	elif (index=="CAC_40" or
-		index=="DAX" or
-		index=="FTSE_100_Index"):
-		region="EU"
-	else:
-		region="EU"
-	print("Region of " +Ticker+ " is "+region)
-	return region
-
-def costofdebt(Interest_Coverage_Ratio, market_cap , Ticker, maturity):
-	#costofdebtdebt should be tax deductable commitment: account payable, under funded pension or health plan, lease...
-	#We could use credit rating but this information is hard to find in a structured way (Yahoo finance, Google Finance, Bloomberg...) therefore we use synthetic rating: Interest Coverage ratio=EBIT/Interest Expenses
-	#Right now we just ignore leasing and pension/health plan
-	riskfreerate= import_data.riskfreerate(get_exchange(Ticker), maturity)
-	spread= synthetic_rating(Interest_Coverage_Ratio, market_cap)
-	costofdebt =  riskfreerate + spread
-	print("\ncost of debt:"+ str(costofdebt))
-	return costofdebt
-
-def	synthetic_rating(Interest_Coverage_Ratio, market_cap):
-		#http://pages.stern.nyu.edu/~adamodar/New_Home_Page/valquestions/syntrating.htm Thank you Aswath Damodaran
-		#Interest_Coverage_Ratio=EBIT/Interest expense
-	if market_cap<10**9: #if the market cap is smaller than 1b
-		if Interest_Coverage_Ratio > 12.5:
-			spread=0.75/100
-		elif Interest_Coverage_Ratio > 9.5:
-			spread=1/100
-		elif Interest_Coverage_Ratio > 7.5:
-			spread=1.5/100
-		elif Interest_Coverage_Ratio > 6:
-			spread=1.8/100
-		elif Interest_Coverage_Ratio > 4.5:
-			spread=2/100
-		elif Interest_Coverage_Ratio > 3.5:
-			spread=2.25/100
-		elif Interest_Coverage_Ratio > 3:
-			spread=3.5/100
-		elif Interest_Coverage_Ratio > 2.5:
-			spread=4.75/100
-		elif Interest_Coverage_Ratio > 2:
-			spread=6.5/100
-		elif Interest_Coverage_Ratio > 1.5:
-			spread=8/100
-		elif Interest_Coverage_Ratio > 1.25:
-			spread=10/100
-		elif Interest_Coverage_Ratio > 0.8:
-			spread=11.5/100
-		elif Interest_Coverage_Ratio > 0.5:
-			spread=12.7/100
-		else:
-			spread=14/100
-	else:
-		if Interest_Coverage_Ratio > 8.5:
-			spread=0.75/100
-		elif Interest_Coverage_Ratio > 6.5:
-			spread=1/100
-		elif Interest_Coverage_Ratio > 5.5:
-			spread=1.5/100
-		elif Interest_Coverage_Ratio > 4.25:
-			spread=1.8/100
-		elif Interest_Coverage_Ratio > 3:
-			spread=2/100
-		elif Interest_Coverage_Ratio > 2.5:
-			spread=2.25/100
-		elif Interest_Coverage_Ratio > 2:
-			spread=3.5/100
-		elif Interest_Coverage_Ratio > 1.75:
-			spread=4.75/100
-		elif Interest_Coverage_Ratio > 1.5:
-			spread=6.5/100
-		elif Interest_Coverage_Ratio > 1.25:
-			spread=8/100
-		elif Interest_Coverage_Ratio > 0.8:
-			spread=10/100
-		elif Interest_Coverage_Ratio > 0.65:
-			spread=11.5/100
-		elif Interest_Coverage_Ratio > 0.2:
-			spread=12.7/100
-		else:
-			spread=14/100
-
-	print("\nspread : "+ str(spread))
-	return spread
-def beta(index,stock):														#index:x,stock:y, sample:'d','w','m','q'daily, weekly, monthly, quarterly
-	#beta mesures the risk of the stock vs the market. The higher is beta, the riskier.
-	#To calculate beta, we use a regression analysis	
-	df_index=index.historical_data['Adj Close']
-	df_stock=stock.historical_data['Adj Close']	
-
-	df_index=df_index.interpolate()											#if for some reason we don't have a value for a specific day, we want to interpolate it
-	df_stock=df_stock.interpolate()	
-
-	samples=['D','W','2W','M','Q']											#we loop different samples to get the best model
-	p_value=10**10
-	for sample in samples:
-
-		df_stock=df_stock.resample(sample).mean()							#we resample the data
-		df_index=df_index.resample(sample).mean()
-		np_stock=df_stock.pct_change().dropna().to_numpy()					#we compute also % of change to get return
-		np_index=df_index.pct_change().dropna().to_numpy()	
-		min_days=-min(len(np_index),len(np_stock))
-		np_index=np_index[min_days:]										#get the last days
-		np_stock=np_stock[min_days:]										#get the last days, this is more realistic because it can be that the stock was not traded for a day.
-		plt.figure(figsize=(20,20))
-		plt.scatter(np_index,np_stock, alpha=.5)
-		np_index=sm.add_constant(np_index, has_constant='add')
-		model = sm.OLS(np_stock,np_index).fit()
-		print(model.summary())
-
-		np_index=np_index[:,1]												#remove the constant
-
-		print(model.f_pvalue)
-		if p_value > model.f_pvalue:										#the lower the p-value, the better
-			p_value=model.f_pvalue
-			#print(model.params)
-			alpha=model.params[0]
-			beta=model.params[1]
-			print("p_value : "+ str(p_value))
-
-			print("alpha ="+ str(alpha) +" beta= "+str(beta))
-			x_model=np.linspace(np_index.min(),np_index.max(),2)
-			y_model=x_model*beta+alpha
-
-			'''plt.xlabel("index return: "+ index.ticker)
-			plt.ylabel("stock return: "+ stock.ticker)
-			plt.title("Raw data and beta\np_value ="+ str(p_value) + "\nSampling : " + sample)
-			plt.plot(x_model,y_model, alpha=0.5)
-			plt.show(block=False)											#Show raw data and model
-			plt.pause(1)
-			plt.close()'''
-			s=sample
-	if p_value < 0.01:														#if p_value lower than 1%, the hypothesis is confirmed. Otherwise we use Yahoo's data as fallback
-		print("p_value : "+ str(p_value) +"\n We accept this model. \n Sample:" +s)
-	else:
-		print("p_value : "+ str(p_value) +"\n The model is not good enough, we use Yahoo data as fallback. Check if we used the right index data")
-		beta=stock.key_statistics.loc['Beta (5Y Monthly)'].values[0]
-		stock.beta_is_fallback=True
-	stock.beta=beta
-	print ("\nbeta=" + str(beta))
-	return beta
-
-def market_return(index_data):
-	#We can assume that the annual historical mean return of index is a good proxy for the expected market return. 
-	#Here, we calculate it as the arithmetic mean of monthly returns (again, based on the 5-year monthly data) and multiply it by 12
-	#we could also calculate this at the sum of dividend and buyback discounted for every stock in the marker
-	#we can compare the data with: https://www.macrotrends.net/2595/dax-30-index-germany-historical-chart-data
-	#some poeple calculate market return as last day - first day/first day. However, if the first day and the last day is good or bad, in orther world, if the market is volitil, this is not really robust.
-	#Therefore we take the mean of the market price over the year. This gives us the same return as if we invest everyday in the market (a.k.a. Dollar-Cost Averaging)
-	df_index=index_data['Adj Close'].interpolate()
-	df_index=df_index.resample('Y').mean()									
-	market_return=df_index.pct_change().dropna()
-	print(market_return)
-	market_return=market_return.mean()	
-	print("Market return :" + str(market_return))
-	return market_return
-
-def costofequity(exchange, index, stock):									#this can be calculated as the sum of dividend and buyback discounted
-	#E(R)=Rf+ β × [MR−Rf]
-	maturity=10																#we assume a maturity of 10 years, 5 years would give us a very low risk free rate
-	rf=import_data.riskfreerate(exchange, maturity)
-	β=beta(index,stock)
-	MR=market_return(index.historical_data)
-	print(rf)
-	print(β)
-	print(MR)
-	costofequity=rf+β*(MR-rf)
-	print("\nCost of equity =" + str(costofequity))
-	return costofequity
-
-def taxrate(financial_statement):																				
-	#using only value might be not accurate, therefore we can use a weithed average of last 4 year with higher weight for recent years
-	quarter=int(datetime.datetime.today().month/3)							#at the begining of the year, data for last year are the same as ttm data, therefore the weight for ttm depends on the quarter
-	taxrate=(financial_statement.loc['Interest Expense'].iat[0]*quarter
-		+financial_statement.loc['Interest Expense'].iat[1]*4
-		+financial_statement.loc['Interest Expense'].iat[2]*3
-		+financial_statement.loc['Interest Expense'].iat[3]*2)/(financial_statement.loc['Income Before Tax'].iat[0]*quarter
-		+financial_statement.loc['Income Before Tax'].iat[1]*4
-		+financial_statement.loc['Income Before Tax'].iat[2]*3
-		+financial_statement.loc['Income Before Tax'].iat[3]*2)
-	print("\nTax rate :" + str(taxrate))
-	return taxrate
-
-
-def debt_market_value(costofdebt,financial_statement, balance_sheet):
-	#The simplest way to estimate the market value of debt is to convert the book value of debt in market value of debt 
-	#by assuming the total debt as a single coupon bond with a coupon equal to the value of interest expenses on the 
-	#total debt and the maturity equal to the weighted average maturity of the debt. 
-	#https://www.myaccountingcourse.com/accounting-dictionary/market-value-of-debt
-	#this is a first approach, we assume the debt has only 1 maturity and we ignore long term and short term debt
-	rate=financial_statement.loc['Interest Expense'].iat[0]/balance_sheet.loc['Total Liabilities'].iat[0]
-	print(rate)
-	nper=10												#this is an assumption because we don't know debt maturity, we assume 10 years of maturity
-	pmt=-financial_statement.loc['Interest Expense'].iat[0]
-	fv=balance_sheet.loc['Total Liabilities'].iat[0]
-	debt_market_value=-np.pv(costofdebt, nper, -pmt, fv)
-	print("Debt market value: " + str(debt_market_value))
-	return debt_market_value
-
-def equity_market_value(summary):
-	#this is equal to #share outstanding * share price but we can just take market cap
-	equity_market_value=summary.loc['Market Cap'].iat[0]
-	return equity_market_value
-
-def	costofcapital(exchange, index, stock):
-	#Weighted average cost of capital at market value (NOT book value because we are interested of the price as of today)
-	#Debt
-	ICO=stock.financial_statement.loc['Income Before Tax'].iat[0]/stock.financial_statement.loc['Interest Expense'].iat[0] 	#we compute interest coverage ration
-	Kd=costofdebt(ICO,stock.summary.loc['Market Cap'].iat[0], stock.ticker, 10)												#Interest_Coverage_Ratio, market_cap , Ticker, maturity
-	#Equity
-	Ke=costofequity(exchange, index, stock)										#exchange, index_data, stock_data, sample :'D', 'W', 'M'
-	E=equity_market_value(stock.summary)
-	D=debt_market_value(Kd,stock.financial_statement*1000, stock.balance_sheet*1000)										#*1000 because all numbers are in 1000
-	print("Equity value :" +str(E))
-	print("Debt value :" +str(D))
-	V=E+D
-	print("Debt ratio :" +str(D/V))
-	taxr=taxrate(stock.financial_statement)
-	stock.taxrate=taxr
-	WACC=E/V*Ke+D/V*Kd*(1-taxr)
-	stock.cost_of_capital=WACC
-	stock.cost_of_debt=Kd
-	stock.cost_of_equity=Ke
-	print("Weighted average cost of capital: " + str(WACC))
-	return WACC	
-def revenue_model(year, a, b, c):
-	#to forecast revenue, we use a log model because a straightline model would be foolish and would assume that growth doesn't decrease when the company become bigger
-	return a * np.log(b * year) + c 
-def gross_margin_model(revenue,a,b,c):
-	#to forecast COGS, we assume that gross margin decrease when sales increase because of economy of scale 
-	return a * np.exp(-b * revenue) + c	
-
-def free_cash_flow(stock, WACC):
-	#http://www.streetofwalls.com/finance-training-courses/investment-banking-technical-training/discounted-cash-flow-analysis/
-	#https://corporatefinanceinstitute.com/resources/knowledge/valuation/dcf-formula-guide/
-	#https://www.wallstreetprep.com/knowledge/income-statement-forecasting/#Depreciation_and_amortization
-	number_of_years=15
-	columns=["year "+ str(i) for i in range(number_of_years)]																#create header for forecast
-	#columns=['year 1', 'year 2', 'year 3', 'year 4', 'year 5', 'year 6', 'year 7', 'year 8', 'year 9', 'year 10', 'year 11', 'year 12', 'year 12', 'year 14', 'year 15']
-	index=['Total Revenue']
-	dfforecast=pd.DataFrame(index=index, columns=columns)	#create forecast line by line, we first forecast revenue, then operation margin...to calculate free cashflow
-
-	#1)forecast revenue
-	revenue=stock.financial_statement.loc['Total Revenue'][-4:].values#.to_numpy()											#we want to use the last 4 years to build a model and use ttm value as a start value for y0
-	revenue=np.flip(revenue)
-	revenue=revenue.tolist()
-	year = [1,2,3,4]#np.linspace(0, 4, 50)		
-	popt, pcov = curve_fit(revenue_model, year, revenue)																	#reverse the order of the years
-	print(popt)
-	year_forecast=[i for i in range(5,5+number_of_years)]																			#create years for forecast
-	#year_forecast=[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
-	revenue_forecast=list()
-	for i in year_forecast:																									#we forecast the revenue with our model, using ttm as start value.
-		revenue_forecast.append(revenue_model(i,popt[0],popt[1],popt[2])+stock.financial_statement.loc['Total Revenue'].iat[0]-stock.financial_statement.loc['Total Revenue'].iat[1])
-	
-	#plt.plot(year,revenue)
-	#plt.plot(year_forecast,revenue_forecast)
-	#plt.show()
-	'''This is for polynomial model
-	poly = PolynomialFeatures(degree=1)
-	X=[[0],[1],[2],[3]]
-	X_=poly.fit_transform(X)
-	reg = linear_model.LinearRegression().fit(X_,revenue)
-	xpred=poly.fit_transform([[4],[5],[6],[7]])
-	#reg.score(revenue,[0,1,2,3])
-	print("coef=" + str(reg.coef_))
-	print("intercept :" +str (reg.intercept_))
-	print(reg.predict(xpred))
-	'''
-	dfforecast.loc['Total Revenue']=revenue_forecast
-	print(dfforecast)
-	#2)COGS (should decrease if Revenue increase: correl revenue and COGS)-->Economy of scale
+def summary(Ticker):
+	#We need price and market Cap
 	try:
-		gross_margin=stock.financial_statement.loc['Cost of Revenue'][-4:].values/stock.financial_statement.loc['Total Revenue'][-4:].sort_values#we use last 4 years to build a model
-		gross_margin=np.flip(gross_margin)																										#reverse the order of the years
-		gross_margin=gross_margin.tolist()		
-		popt, pcov = curve_fit(gross_margin_model, revenue, gross_margin)
-		COGS_forecast=list()
-		for rev in revenue_forecast:
-			COGS_forecast.append(gross_margin_model(rev,popt[0],popt[1],popt[2])*rev)															#we forecast cost based on forecasted revenue
-		dfforecast.loc['- Cost of Revenue']=COGS_forecast
-	except:
-		print("\nno Cost of Revenue found")
-		dfforecast.loc['- Cost of Revenue']=0
-
-	#compute Gross profit
-	dfforecast.loc['= Gross Profit']=dfforecast.loc['Total Revenue']-dfforecast.loc['- Cost of Revenue']
-	
-	#3)R&D + SG&A for tech companies Research Development might drive Revenue and growth but we first ignore thisand estimate constant
-	try:
-		RnD=(stock.financial_statement.loc['Research Development']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
-	except:
-		RnD=0
-	try:
-		SGnA=(stock.financial_statement.loc['Selling General and Administrative']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
-	except:
-		SGnA=0
-	if RnD + SGnA==0:																															#This means that we don't have the breakdown for SGnA and RnD
-		try:
-			TOE=(stock.financial_statement.loc['Total Operating Expenses']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
+		df=pd.read_pickle("./data/summary_"+Ticker+".pkl")											#we don't want to scrap yahoo if we already saved the data localy
+	except:			
+		print("Data doesn't exist, importing...")													#if we don't have the data localy, we get them and save them locally
+		URL="https://finance.yahoo.com/quote/"+ Ticker
+		dfread=pd.read_html(URL)
+		df=dfread[0]
+		for i in range(1,len(dfread)):																#merging datafrane
+			df=df.append(dfread[i])
+		df=df.set_index(0, inplace=False)
+		try :
+			df.loc['Market Cap'].iat[0]=df.loc['Market Cap'].iat[0].replace("M","*1000000")				#Convert million
+			df.loc['Market Cap'].iat[0]=df.loc['Market Cap'].iat[0].replace("B","*1000000000")			#Convert billion
+			df.loc['Market Cap'].iat[0]=df.loc['Market Cap'].iat[0].replace("T","*1000000000000")		#Convert trillion
 		except:
-			print("Could not find Total Operating Expenses")
-			TOE=0
-		dfforecast.loc['= Total Operating Expenses']=dfforecast.loc['Total Revenue']*TOE
+			print("nothing to replace")
+		df.loc['Market Cap'].iat[0]=pd.eval(df.loc['Market Cap'].iat[0])
+		print(df)
+		#df=	pd.eval(df,inplace=True)
+		df.to_pickle("./data/summary_"+Ticker+".pkl")												#save scrapped data
+		time.sleep(random.random())
+	print("\nMarket data for "+ Ticker +" : " )
+	print(df)
+	
+	return(df)
+
+def key_statistics(Ticker):
+	try:
+		df=pd.read_pickle("./data/key_statistics_"+Ticker+".pkl")									#we don't want to scrap yahoo if we already saved the data localy
+	except:	
+		URL="https://finance.yahoo.com/quote/"+Ticker+"/key-statistics"
+		dfread=pd.read_html(URL)
+		df=dfread[0]
+		for i in range(1,len(dfread)):																#merging datafrane
+			df=df.append(dfread[i])
+		df=df.set_index(0, inplace=False)
+		df.to_pickle("./data/key_statistics_"+Ticker+".pkl")										#save scrapped data
+		time.sleep(random.random())
+	print("\nKey statistics for "+ Ticker +" : " )
+	print(df)
+	
+	return(df)
+
+def historical_data(Ticker, days):	
+	#reading historical data
+	#dfs1=pd.read_html(URLhistory)-->This would give us only 3 months of data therefore it is better to download the data as csv and read it
+	#https://query1.finance.yahoo.com/v7/finance/download/TOT?period1=1552489321&period2=1584111721&interval=1d&events=history&crumb=SyAISp1rhi7 ->This is how the URL to download the CSV looks like. We need period 1, period 2 and crumb
+	#ttm means trailing 12 months meaning last 4 quarters earning.
+	try:
+		df=pd.read_pickle("./data/historical_data_"+Ticker+".pkl")									#we don't want to scrap yahoo if we already saved the data localy	
+	except:	
+		print("Data doesn't exist, importing...")
+		period_end=int(time.mktime(datetime.date(datetime.datetime.today().year,datetime.datetime.today().month,datetime.datetime.today().day).timetuple()))#timestanp for last trading day (yesterday)
+		period_begin=period_end-60*60*24*days#this would be for 1 year or 365 days
+		URLhistory="https://finance.yahoo.com/quote/"+Ticker+"/history?period1="+str(period_begin)+"&period2="+str(period_end)+"&interval=1d&filter=history&frequency=1d"
+
+		options = webdriver.ChromeOptions()
+		options.add_experimental_option("prefs", {
+		    #"download.default_directory": r"yahoo_data",
+		    "download.prompt_for_download": False,
+		    "download.directory_upgrade": True#,
+		})
+		driver = webdriver.Chrome(chrome_options=options)
+		crumb = None
+		driver.get(URLhistory)
+		time.sleep(1)
+		button = driver.find_element_by_name('agree') 												#agree to GDPR prompt
+		button.click()
+		time.sleep(3)
+		#button = driver.find_element_by_xpath("// a[. // span[text() = 'Download Data']]")
+		button = driver.find_element_by_xpath("// a[. // span[text() = 'Download Data']]")
+		time.sleep(2)
+		link = button.get_attribute("href")
+		print(link)
+		#a = urlparse(link)
+		crumb = link[len(link)-link.find("crumb"):]													#find crumb in link and take right part
+		print(crumb)
+		URLhistorydownload="https://query1.finance.yahoo.com/v7/finance/download/"+Ticker+"?period1="+str(period_begin)+"&period2="+str(period_end)+"&interval=1d&events=history&crumb="+crumb
+		
+		driver.get(URLhistorydownload)
+		time.sleep(3)
+		driver.close()
+		#URLhistory="https://query1.finance.yahoo.com/v7/finance/download/"+Ticker+"?period1=1552254787&period2=1583877187&interval=1d&events=history&crumb=SyAISp1rhi7"
+		
+		#s=requests.get(URLhistory).content
+		df=pd.read_csv('C:/Users/jtran_000/Downloads/'+Ticker+'.csv', header=0)						#reading the CSV file with panda		
+		df=df.set_index('Date', inplace=False)
+		df.index=pd.to_datetime(df.index)															#convert first column to datetime
+		df.to_pickle("./data/historical_data_"+Ticker+".pkl")										#save scrapped data			
+	print("\nHistorical data for "+ Ticker +" : " )
+	print(df)
+	return df
+
+def profile(Ticker):
+	#this is important for multiple analysis to know the industry
+	column=['Sector','Industry']
+	try:
+		df=pd.read_pickle("./data/profile.pkl")												
+	except:	
+		print("Data doesn't exist, importing...")
+		df=pd.DataFrame(index=[0], columns=column)
+		
+	if df.index.isin([Ticker]).any():																##check if the value exists
+		print("The industry and sector for this ticker is already known")							#we don't want to scrap yahoo if we already saved the data localy
+		sector=df.loc[Ticker].iat[0]
+		industry=df.loc[Ticker].iat[1]
+		print("\nSector :"+ sector +"\nIndustry"+ industry)
 	else:
-		dfforecast.loc['- Research Development']=dfforecast.loc['Total Revenue']*RnD
-		dfforecast.loc['- Selling General and Administrative']=dfforecast.loc['Total Revenue']*SGnA
-		dfforecast.loc['= Total Operating Expenses']=dfforecast.loc['- Selling General and Administrative']+dfforecast.loc['- Research Development']
-	#4)EBITDA
-	dfforecast.loc['= EBITDA']=dfforecast.loc['= Gross Profit']-dfforecast.loc['= Total Operating Expenses']
+		URL="https://finance.yahoo.com/quote/"+Ticker+"/profile"
+		r= requests.get(URL)
+		data=r.text
+		soup=bs.BeautifulSoup(data,'lxml')#html.parser')
+		container=soup.findAll("span", class_='Fw(600)')		
+		r.close()
+		sector=container[0].text		
+		industry=container[1].text	
+		#dftemp=pd.DataFrame(, columns=column, index=[Ticker])
+		#df=df.append(dftemp)
 
-	 
+		df.loc[Ticker]=[sector,industry]
+		#print(dftemp)
+		df=df.drop_duplicates()
+		#df=df.drop_na()
+		print(df)
+		df.to_pickle("./data/profile.pkl")															#save scrapped data
+		time.sleep(random.random())
+	print("\nIndustry data for "+ Ticker +" : " )
+	print(df)
+	return(sector, industry)
 
-	#5)-D&A
-	#we can go more fancy and forecast balance sheet and estimate D&A but for now let's assume D&A is proportional to salesand capex remains the same
-	#to estimate D&A we should recreate balance sheet with days sales outstanding, inventory turnover ratio, number of days payables
-	#https://www.wallstreetprep.com/knowledge/guide-balance-sheet-projections/
+	#//*[@id="Col1-0-Profile-Proxy"]/section/div[1]/div/div/p[2]/span[2]
+
+def financial_statement(Ticker,statement):
+	#all numbers are in 1000
+	#we could also get the data from simfin.com
 	try:
-		DnA=(stock.cash_flow_statement.loc['Depreciation & amortization']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
-	except:
-		DnA=0
-	dfforecast.loc['- Depreciation & amortization']=DnA*dfforecast.loc['Total Revenue']
+		df=pd.read_pickle("./data/"+statement+"_"+Ticker+".pkl")									#we don't want to scrap yahoo if we already saved the data localy	
+	except:	
+		print("Data doesn't exist, importing...")
+		column=[]
+		if statement== 'financials':
+			URL="https://finance.yahoo.com/quote/"+Ticker+"/financials"
+		elif statement=='balance-sheet':
+			URL="https://finance.yahoo.com/quote/"+Ticker+"/balance-sheet"
+		elif statement=='cash-flow':
+			URL="https://finance.yahoo.com/quote/"+Ticker+"/cash-flow"
+		r= requests.get(URL)
+		data=r.text
+		soup=bs.BeautifulSoup(data,'lxml')#html.parser')
+		container=soup.findAll("div", class_='D(tbr)')					
+		for table_data in container[0].find_all('div', class_='D(ib)'):								#initialize header
+			column.append(table_data.text)
 
-	#Tax effected Ebit
-	dfforecast.loc['= EBIT']=dfforecast.loc['= EBITDA']-dfforecast.loc['- Depreciation & amortization']	
-	
-	#6)tax
-	taxr=taxrate(stock.financial_statement)
-	dfforecast.loc['- Tax']=dfforecast.loc['= EBIT']*taxr
-	dfforecast.loc['= Tax effected Ebit']=dfforecast.loc['= EBIT']-dfforecast.loc['- Tax']
+		df=pd.DataFrame(index=[0], columns=column)													#create empty dataframe with header
+		for i in range(1,len(container)):															#we loop for each row of the table starting with row 1 (first row after header)
+			j=0
+			for col in container[i].find_all('div', class_='D(tbc)'):								#we loop for each column
+				#print("i: "+str(i)+"   j: "+str(j)+"    text: "+col.text)
+				if j==0:																			#this is the first column, therefore we want to copy it as text
+					df=df.append([{'Breakdown': col.text}],ignore_index=True)						#create a new ligne and populate first column
+				else:																				#this should be a numerical value
+					try:
+						df.iloc[-1,j]=float(col.text.replace(',','')) 								#populating the first non valid dataset and convert it to float
+					except:
+						df.iloc[-1,j]='NaN'
+				j=j+1
+		r.close()
+		df=df.set_index('Breakdown', inplace=False)													#set first column as index
+		#df=df.drop(['NaN'])
+		df.to_pickle("./data/"+statement+"_"+Ticker+".pkl")											#save scrapped data
+		time.sleep(random.random())
+	print("\n"+statement + " for "+ Ticker +" : " )
+	print(df)	
+	return(df)			
 
-	#7)+D&A+netCAPEX (non-cash expenses)
-	#https://www.wallstreetoasis.com/forums/best-way-to-forecast-da-and-capex
-	dfforecast.loc['+ Depreciation & amortization']=DnA*dfforecast.loc['Total Revenue']
+def options(Ticker):
 	try:
-		capex=stock.cash_flow_statement.loc['Capital Expenditure'].mean(axis=0)
-	except:
-		capex=0
-		print("Capital Expenditure not found")
-	dfforecast.loc['+ CAPEX']=capex
+		df=pd.read_pickle("./data/options_"+Ticker+".pkl")											#we don't want to scrap yahoo if we already saved the data localy	
+	except:	
+		print("Data doesn't exist, importing...")
+		URL="https://finance.yahoo.com/quote/"+Ticker+"/options"
+		try:
+			dfread=pd.read_html(URL,header=0)
+			df=dfread[0]
+			for i in range(1,len(dfread)):															#merging datafrane
+				df=df.append(dfread[i])
+			df=df.set_index('Contract Name', inplace=False)
+			df.to_pickle("./data/options_"+Ticker+".pkl")											#save scrapped data
+			time.sleep(random.random())
+		except:
+			print("No options for this company")
+			df=""
+	print("\nOptions for "+ Ticker +" :" )
+	print(df)
+	return(df)
 
-	#8)netWorkingCapital
-	nWC=(stock.cash_flow_statement.loc['Change in working capital']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
-	dfforecast.loc['+ netWorkingCapital']=nWC*dfforecast.loc['Total Revenue']
+def shares_outstanding(stock):
+	share_outstanding=stock.key_statistics.loc['Shares Outstanding 5'].values
+	share_outstanding[0]=share_outstanding[0].replace("M","*1000000")	#Convert million
+	share_outstanding[0]=share_outstanding[0].replace("B","*1000000000")	#Convert billion
+	share_outstanding=pd.eval(share_outstanding)
+	print(share_outstanding[0])
+	return share_outstanding[0]
 
+def price(stock):
+	price=stock.summary.loc['Open'].values															#for now we take the opening price but we could take an average of bid and ask price
+	print("\nPrice: "+price[0])
+	return float(price[0])	
+
+def riskfreerate(exchange, maturity): #get riskfreerate, either for US, UK or EU equities
+	#let's take bond rate with same time horizon as investment 5 to 10 years
+	#^IRX	13 Week Treasury Bill
+	#^FVX	Treasury Yield 5 Years
+	#^TNX	Treasury Yield 10 Years
+	#^TYX	Treasury Yield 30 Years
+	#we could also use https://www.bloomberg.com/markets/rates-bonds/government-bonds/
+	try:
+		df=pd.read_pickle("./data/riskfreerate_"+exchange+".pkl")									#we don't want to scrap yahoo if we already saved the data localy	
+	except:	
+		print("Data doesn't exist, importing...")
+		if exchange == 'US':
+			URL="https://www.investing.com/rates-bonds/usa-government-bonds"
+		elif exchange == 'UK':
+			URL="https://www.investing.com/rates-bonds/uk-government-bond"
+		elif exchange == 'EU':
+			URL="https://www.investing.com/rates-bonds/germany-government-bonds" 					#for EU we take german bond because it has the lowest yield in Europe and can therefore be considered as the safest bond
+		else:
+			print("exchange market unknown")
+		#to avoid 403 return we use header in the request
+		header = {
+			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36",
+			"X-Requested-With": "XMLHttpRequest"
+			}
+		r=requests.get(URL,headers=header)
+		dfread=pd.read_html(r.text)
+		df=dfread[0]
+		df.to_pickle("./data/riskfreerate_"+exchange+".pkl")	
+		time.sleep(random.random())
+	print("\nRisk-free rate for "+ exchange +" :" )
+	print(df)
+	for row in df.index:
+		if df['Name'][row].find(str(maturity))>=0 and df['Name'][row].find("M")==-1:
+			riskfreerate=df['Yield'][row]/100
+			break
+	print("\n Risk-free rate for "+exchange + " maturity: " + str(maturity) + " years = " + str(riskfreerate))
+	return(riskfreerate)
+		
+
+def list_market_index():
+		#Major index:
+		#https://en.wikipedia.org/wiki/NYSE_Arca_Major_Market_Index
+		#https://en.wikipedia.org/wiki/List_of_S%26P_500_companies
+		#https://en.wikipedia.org/wiki/NASDAQ-100
+		#https://en.wikipedia.org/wiki/CAC_40
+		#https://en.wikipedia.org/wiki/DAX
+		#https://en.wikipedia.org/wiki/FTSE_100_Index
+		#https://en.wikipedia.org/wiki/Russell_1000_Index
+	index=["NYSE_Arca_Major_Market_Index","List_of_S%26P_500_companies","NASDAQ-100","CAC_40","DAX","FTSE_100_Index","Russell_1000_Index"]
+	column=['Company','Ticker']
+	global NYSE_Arca_Major_Market_Index																#can be used everywhere
+	global List_of_SP_500_companies	
+	global NASDAQ_100
+	global CAC_40	
+	global DAX		
+	global FTSE_100_Index
+	global Russell_1000_Index	
+	for ind in index:
+		try:
+			df=pd.read_pickle("./data/"+ind+".pkl")													#we don't want to scrap yahoo if we already saved the data localy	
+		except:	
+			print("Data doesn't exist, importing...")
+			URL="https://en.wikipedia.org/wiki/"+ind
+			dfread=pd.read_html(URL, header=0)
+			df=pd.DataFrame(index=[0], columns=column)												#empty dataframe
+			if ind=="NYSE_Arca_Major_Market_Index":													#we populate the dataframe
+				df=dfread[1][['Company','Symbol']].copy()
+				df=df.rename(columns={"Symbol": "Ticker"})
+				NYSE_Arca_Major_Market_Index=df
+			elif ind=="List_of_S%26P_500_companies":												#we populate the dataframe
+				df=dfread[0][['Security','Symbol']].copy()
+				df=df.rename(columns={"Security":"Company","Symbol":"Ticker"})
+				List_of_SP_500_companies=df
+			elif ind=="NASDAQ-100":																	#we populate the dataframe
+				df=dfread[2].copy()
+				NASDAQ_100=df	
+			elif ind=="CAC_40":																		#we populate the dataframe
+				df=dfread[3][['Company','Ticker']].copy()
+				CAC_40=df	
+			elif ind=="DAX":																		#we populate the dataframe
+				df=dfread[3][['Company','Ticker symbol']].copy()
+				df=df.rename(columns={"Ticker symbol":"Ticker"})
+				DAX=df	
+			elif ind=="FTSE_100_Index":																#we populate the dataframe
+				df=dfread[3][['Company','Ticker']].copy()
+				FTSE_100_Index=df	
+			elif ind=="Russell_1000_Index":															#we populate the dataframe
+				df=dfread[3][['Company','Ticker']].copy()
+				Russell_1000_Index=df
+			df=df.set_index('Contract Name', inplace=False)
+			df.to_pickle("./data/"+ind+".pkl")
+			time.sleep(random.random())		
+		else:
+			if ind=="NYSE_Arca_Major_Market_Index":													#get data from archive										
+				NYSE_Arca_Major_Market_Index=df
+			elif ind=="List_of_S%26P_500_companies":																		
+				List_of_SP_500_companies=df
+			elif ind=="NASDAQ-100":														
+				NASDAQ_100=df	
+			elif ind=="CAC_40":															
+				CAC_40=df	
+			elif ind=="DAX":															
+				DAX=df	
+			elif ind=="FTSE_100_Index":													
+				FTSE_100_Index=df	
+			elif ind=="Russell_1000_Index":												
+				Russell_1000_Index=df
+
+		#print("\n "+ ind)
+		#sprint(df)
 	
-	#9)DCF
-	dfforecast.loc['= Free Cash Flow'] = dfforecast.loc['= Tax effected Ebit'] + dfforecast.loc['+ Depreciation & amortization'] + dfforecast.loc['+ CAPEX'] + dfforecast.loc['+ netWorkingCapital']
-	print(dfforecast)
-	#10)Terminal value
-	growth=dfforecast.loc['= Free Cash Flow'].pct_change().min()*1/2
-	#Gordon Formula: Terminal Value = FCFn × (1 + g) ÷ (r – g)
-	#we could either use Gordon Formula or increase the number of years to calculate cashflow. It seems that the result of Gordon Terminal value highly depend on the expected growth and WACC. 
-	#Therefore we use 15 years discounted cashflow which is average lifespan of S&P500 companies
-	#https://www.bbc.com/news/business-16611040
-	#print(WACC)
-	#print (growth)
-	TV=dfforecast.loc['= Free Cash Flow'].iat[-1] * (1 + growth) / (WACC- growth)
-	#print(TV)
-	cashflow=dfforecast.loc['= Free Cash Flow'].tolist()#.append(TV)
-	#print(cashflow)
-	#cashflow.append(TV)
-	#print(cashflow)
-	EV=np.npv(WACC,cashflow)/(1+WACC)
-	print("\n Entreprise value:"+ str(EV))
-	stock.entreprise_value=EV
-	return EV
+def get_index(Ticker):
+	list_market_index()																				#get Ticker of major index
+	#index=["NYSE_Arca_Major_Market_Index","List_of_S%26P_500_companies","NASDAQ-100","CAC_40","DAX","FTSE_100_Index","Russell_1000_Index"]
+	if Ticker in NYSE_Arca_Major_Market_Index[['Ticker']].values:
+		index="NYSE_Arca_Major_Market_Index"
+	if Ticker in List_of_SP_500_companies[['Ticker']].values:
+		index="List_of_SP_500_companies"
+	if Ticker in NASDAQ_100[['Ticker']].values:
+		index="NASDAQ_100"
+	if Ticker in CAC_40[['Ticker']].values:
+		index="CAC_40"
+	if Ticker in DAX[['Ticker']].values:
+		index="DAX"
+	if Ticker in FTSE_100_Index[['Ticker']].values:
+		index="FTSE_100_Index"
+	if Ticker in Russell_1000_Index[['Ticker']].values:
+		index="Russell_1000_Index"
+	else: 
+		index="not found"
+
+	print(Ticker + "'s index is "+ index)
+	return index
+
+
+class market_index:
+	def __init__(self, Ticker):
+		self.ticker=Ticker
+		#self.exchange: str=''
+		self.historical_data=historical_data(Ticker,1825)											#1825=%years
+
+class company_data:
+	cost_of_debt: float 
+	cost_of_equity: float
+	cost_of_capital: float
+	beta: float
+	beta_is_fallback: bool = False
+	taxrate: float 
+	entreprise_value: float
+	leverage: float
+	potential_gain_loss: float
+	def __init__(self, Ticker):
+		self.ticker=Ticker
+		self.name=''
+		self.index=get_index(Ticker)
+		self.summary=summary(Ticker)
+		self.key_statistics=key_statistics(Ticker)
+		self.historical_data=historical_data(Ticker,1825)											#1825=%years
+		self.profile=profile(Ticker)																#sector & industry
+		self.financial_statement=financial_statement(Ticker,'financials')
+		self.cash_flow_statement=financial_statement(Ticker,'cash-flow')
+		self.balance_sheet=financial_statement(Ticker,'balance-sheet')
+		self.shares_outstanding=shares_outstanding(self)
+		self.price=price(self)
+		self.options=options(Ticker)
+
 
 def main():
-	
-	#index=import_data.market_index("^GDAXI")
-
-	#ICO=SAP.financial_statement.loc['Income Before Tax'].iat[0]/SAP.financial_statement.loc['Interest Expense'].iat[0]
-	#syntetic_rating(ICO,Total.summary.loc['Market Cap'].iat[0])
-	#costofdebt=costofdebt(ICO,SAP.summary.loc['Market Cap'].iat[0],"SAP",5)
-	#print(DAX.historical_data)
-	#print(SAP.historical_data)
-	#cofd=costofdebt(ICO,SAP.summary.loc['Market Cap'].iat[0],"SAP",5)
-	#beta(DAX.historical_data,SAP.historical_data,'M')
-	#print(market_return(DAX.historical_data))
-	#costofequity("EU",5,DAX.historical_data,SAP.historical_data,'M')
-	#taxrate(SAP.financial_statement)
-	pd.set_option('precision', 2)																					#format float dataframe with 2 significant digits
-	
-	import_data.list_market_index()																						#initializes index data
-
-	df_result=pd.DataFrame(index=[],columns=[
-		'Sector', 'Industry', 'Cost of Debt',
-		'Cost of Equity','Cost of Capital', 'beta', 
-		'Beta is fallback', 'taxrate', 'Entreprise Value', 
-		'Share Value', 'Share Price', 'Potential Gain/Loss'
-		])
-	index=import_data.market_index("^DJI")																				#Dow Jones
-
-	
-	for row in import_data.NYSE_Arca_Major_Market_Index.iterrows():
-		try:
-			stock=import_data.company_data(row[1][1])
-			WACC=costofcapital(get_exchange(index.ticker), index, stock)
-			EV=free_cash_flow(stock,WACC)*1000
-			share_value=EV/stock.shares_outstanding
-			stock.potential_gain_loss=(share_value-stock.price)/stock.price
-			df_result.loc[stock.ticker]=[
-				stock.profile[0], stock.profile[1], stock.cost_of_debt, 
-				stock.cost_of_equity, stock.cost_of_capital, stock.beta, 
-				stock.beta_is_fallback, stock.taxrate, stock.entreprise_value, 
-				share_value, stock.price, stock.potential_gain_loss
-				]
-		except:
-			print("Impossible to value " + row[1][1])
-	
-	
-	index=import_data.market_index("^GSPC")																				#S&P500
-	for row in import_data.List_of_SP_500_companies.iterrows():
-		try: 
-			stock=import_data.company_data(row[1][1])
-			WACC=costofcapital(get_exchange(index.ticker), index, stock)
-			EV=free_cash_flow(stock,WACC)*1000
-			share_value=EV/stock.shares_outstanding
-			stock.potential_gain_loss=(share_value-stock.price)/stock.price
-			df_result.loc[stock.ticker]=[
-			stock.profile[0], stock.profile[1], stock.cost_of_debt,
-			stock.cost_of_equity, stock.cost_of_capital, stock.beta,
-			stock.beta_is_fallback, stock.taxrate, stock.entreprise_value,
-			share_value, stock.price, stock.potential_gain_loss
-			]
-		except:
-			print("Impossible to value " + row[1][1])
-	print(df_result.sort_values(by=['Sector', 'Industry']))
-	
-	index=import_data.market_index("^IXIC")																				#NASDAQ Composite
-	for row in import_data.NASDAQ_100.iterrows():
-		try:
-			stock=import_data.company_data(row[1][1])
-			WACC=costofcapital(get_exchange(index.ticker), index, stock)
-			EV=free_cash_flow(stock,WACC)*1000
-			share_value=EV/stock.shares_outstanding
-			stock.potential_gain_loss=(share_value-stock.price)/stock.price
-			df_result.loc[stock.ticker]=[
-			stock.profile[0], stock.profile[1], stock.cost_of_debt, 
-			stock.cost_of_equity, stock.cost_of_capital, stock.beta, 
-			stock.beta_is_fallback, stock.taxrate, stock.entreprise_value, 
-			share_value, stock.price, stock.potential_gain_loss
-			]
-		except:
-			print("Impossible to value " + row[1][1])
-	print(df_result.sort_values(by=['Sector', 'Industry']))
+	#Total=company_data("TOT")
+	profile("TOT")
 
 
-	index=import_data.market_index("^FCHI")																				#CAC40
-	for row in import_data.CAC_40.iterrows():
-		try:
-			stock=import_data.company_data(row[1][1])
-			WACC=costofcapital(get_exchange(index.ticker), index, stock)
-			EV=free_cash_flow(stock,WACC)*1000
-			share_value=EV/stock.shares_outstanding
-			stock.potential_gain_loss=(share_value-stock.price)/stock.price
-			df_result.loc[stock.ticker]=[
-			stock.profile[0], stock.profile[1], stock.cost_of_debt, 
-			stock.cost_of_equity, stock.cost_of_capital, stock.beta,
-			stock.beta_is_fallback, stock.taxrate, stock.entreprise_value, 
-			share_value, stock.price, stock.potential_gain_loss
-			]
-		except:
-			print("Impossible to value " + row[1][1])
-	print(df_result.sort_values(by=['Sector', 'Industry']))
-	
-	index=import_data.market_index("^GDAXI")																			#DAX
-	for row in import_data.DAX.iterrows():
-		try:
-			stock=import_data.company_data(row[1][1])
-			WACC=costofcapital(get_exchange(index.ticker), index, stock)
-			EV=free_cash_flow(stock,WACC)*1000
-			share_value=EV/stock.shares_outstanding
-			stock.potential_gain_loss=(share_value-stock.price)/stock.price
-			df_result.loc[stock.ticker]=[
-			stock.profile[0], stock.profile[1], stock.cost_of_debt, 
-			stock.cost_of_equity, stock.cost_of_capital, stock.beta, 
-			stock.beta_is_fallback,stock.taxrate, stock.entreprise_value, 
-			share_value, stock.price, stock.potential_gain_loss
-			]
-		except:
-			print("Impossible to value " + row[1][1])
-	print(df_result.sort_values(by=['Sector', 'Industry']))
-	
-
-	index=import_data.market_index("UKXNUK.L")																			#FTSE
-	for row in import_data.FTSE_100_Index.iterrows():
-		try:
-			stock=import_data.company_data(row[1][1])
-			WACC=costofcapital(get_exchange(index.ticker), index, stock)
-			EV=free_cash_flow(stock,WACC)*1000
-			share_value=EV/stock.shares_outstanding
-			stock.potential_gain_loss=(share_value-stock.price)/stock.price
-			df_result.loc[stock.ticker]=[
-			stock.profile[0], stock.profile[1], stock.cost_of_debt, 
-			stock.cost_of_equity, stock.cost_of_capital, stock.beta, 
-			stock.beta_is_fallback, stock.taxrate, stock.entreprise_value, 
-			share_value, stock.price, stock.potential_gain_loss
-			]
-		except:
-			print("Impossible to value " + row[1][1])
-	print(df_result.sort_values(by=['Sector', 'Industry']))
-	
-	index=import_data.market_index("^RUT")																				#Russell_1000_Index
-	for row in import_data.Russell_1000_Index.iterrows():
-		try:
-			stock=import_data.company_data(row[1][1])
-			WACC=costofcapital(get_exchange(index.ticker), index, stock)
-			EV=free_cash_flow(stock,WACC)*1000
-			share_value=EV/stock.shares_outstanding
-			stock.potential_gain_loss=(share_value-stock.price)/stock.price
-			df_result.loc[stock.ticker]=[
-			stock.profile[0], stock.profile[1], stock.cost_of_debt, 
-			stock.cost_of_equity, stock.cost_of_capital, stock.beta, 
-			stock.beta_is_fallback, stock.taxrate, stock.entreprise_value, 
-			share_value, stock.price, stock.potential_gain_loss
-			]
-		except:
-			print("Impossible to value " + row[1][1])
-	print(df_result.sort_values(by=['Sector', 'Industry']))
-
-	print("\nResult for NYSE:")
-	print(import_data.NYSE_Arca_Major_Market_Index.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
-
-	print("\nResult for S&P500:")
-	print(import_data.List_of_SP_500_companies.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))	
-	
-	print("\nResult for NASDAQ Composite:")
-	print(import_data.NASDAQ_100.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
-
-	print("\nResult for CAC40:")
-	print(import_data.CAC_40.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
-
-	print("\nResult for DAX:")
-	print(import_data.DAX.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
-
-	print("\nResult for FTSE:")
-	print(import_data.FTSE_100_Index.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
-
-	print("\nResult for Russell 1000 Index:")
-	print(import_data.Russell_1000_Index.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
-	
 if __name__ == "__main__":
-	main()
+	 main() 

@@ -100,36 +100,36 @@ def	synthetic_rating(Interest_Coverage_Ratio, market_cap):
 
 	print("\nspread : "+ str(spread))
 	return spread
-def beta(index,stock):														#index:x,stock:y, sample:'d','w','m','q'daily, weekly, monthly, quarterly
+def beta(index,stock):																										#index:x,stock:y, sample:'d','w','m','q'daily, weekly, monthly, quarterly
 	#beta mesures the risk of the stock vs the market. The higher is beta, the riskier.
 	#To calculate beta, we use a regression analysis	
 	df_index=index.historical_data['Adj Close']
 	df_stock=stock.historical_data['Adj Close']	
 
-	df_index=df_index.interpolate()											#if for some reason we don't have a value for a specific day, we want to interpolate it
+	df_index=df_index.interpolate()																							#if for some reason we don't have a value for a specific day, we want to interpolate it
 	df_stock=df_stock.interpolate()	
 
-	samples=['D','W','2W','M','Q']											#we loop different samples to get the best model
+	samples=['D','W','2W','M','Q']																							#we loop different samples to get the best model
 	p_value=10**10
 	for sample in samples:
 
-		df_stock=df_stock.resample(sample).mean()							#we resample the data
+		df_stock=df_stock.resample(sample).mean()																			#we resample the data
 		df_index=df_index.resample(sample).mean()
-		np_stock=df_stock.pct_change().dropna().to_numpy()					#we compute also % of change to get return
+		np_stock=df_stock.pct_change().dropna().to_numpy()																	#we compute also % of change to get return
 		np_index=df_index.pct_change().dropna().to_numpy()	
 		min_days=-min(len(np_index),len(np_stock))
-		np_index=np_index[min_days:]										#get the last days
-		np_stock=np_stock[min_days:]										#get the last days, this is more realistic because it can be that the stock was not traded for a day.
+		np_index=np_index[min_days:]																						#get the last days
+		np_stock=np_stock[min_days:]																						#get the last days, this is more realistic because it can be that the stock was not traded for a day.
 		plt.figure(figsize=(20,20))
 		plt.scatter(np_index,np_stock, alpha=.5)
 		np_index=sm.add_constant(np_index, has_constant='add')
 		model = sm.OLS(np_stock,np_index).fit()
 		print(model.summary())
 
-		np_index=np_index[:,1]												#remove the constant
+		np_index=np_index[:,1]																								#remove the constant
 
 		print(model.f_pvalue)
-		if p_value > model.f_pvalue:										#the lower the p-value, the better
+		if p_value > model.f_pvalue:																						#the lower the p-value, the better
 			p_value=model.f_pvalue
 			#print(model.params)
 			alpha=model.params[0]
@@ -144,11 +144,11 @@ def beta(index,stock):														#index:x,stock:y, sample:'d','w','m','q'dail
 			plt.ylabel("stock return: "+ stock.ticker)
 			plt.title("Raw data and beta\np_value ="+ str(p_value) + "\nSampling : " + sample)
 			plt.plot(x_model,y_model, alpha=0.5)
-			plt.show(block=False)											#Show raw data and model
+			plt.show(block=False)																							#Show raw data and model
 			plt.pause(1)
 			plt.close()'''
 			s=sample
-	if p_value < 0.01:														#if p_value lower than 1%, the hypothesis is confirmed. Otherwise we use Yahoo's data as fallback
+	if p_value < 0.01:																										#if p_value lower than 1%, the hypothesis is confirmed. Otherwise we use Yahoo's data as fallback
 		print("p_value : "+ str(p_value) +"\n We accept this model. \n Sample:" +s)
 	else:
 		print("p_value : "+ str(p_value) +"\n The model is not good enough, we use Yahoo data as fallback. Check if we used the right index data")
@@ -173,9 +173,9 @@ def market_return(index_data):
 	print("Market return :" + str(market_return))
 	return market_return
 
-def costofequity(exchange, index, stock):									#this can be calculated as the sum of dividend and buyback discounted
+def costofequity(exchange, index, stock):																					#this can be calculated as the sum of dividend and buyback discounted
 	#E(R)=Rf+ β × [MR−Rf]
-	maturity=10																#we assume a maturity of 10 years, 5 years would give us a very low risk free rate
+	maturity=10																												#we assume a maturity of 10 years, 5 years would give us a very low risk free rate
 	rf=import_data.riskfreerate(exchange, maturity)
 	β=beta(index,stock)
 	MR=market_return(index.historical_data)
@@ -240,6 +240,7 @@ def	costofcapital(exchange, index, stock):
 	stock.cost_of_debt=Kd
 	stock.cost_of_equity=Ke
 	print("Weighted average cost of capital: " + str(WACC))
+	stock.leverage=D/(E+D)
 	return WACC	
 def revenue_model(year, a, b, c):
 	#to forecast revenue, we use a log model because a straightline model would be foolish and would assume that growth doesn't decrease when the company become bigger
@@ -265,7 +266,7 @@ def free_cash_flow(stock, WACC):
 	year = [1,2,3,4]#np.linspace(0, 4, 50)		
 	popt, pcov = curve_fit(revenue_model, year, revenue)																	#reverse the order of the years
 	print(popt)
-	year_forecast=[i for i in range(5,5+number_of_years)]																			#create years for forecast
+	year_forecast=[i for i in range(5,5+number_of_years)]																	#create years for forecast
 	#year_forecast=[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
 	revenue_forecast=list()
 	for i in year_forecast:																									#we forecast the revenue with our model, using ttm as start value.
@@ -290,12 +291,12 @@ def free_cash_flow(stock, WACC):
 	#2)COGS (should decrease if Revenue increase: correl revenue and COGS)-->Economy of scale
 	try:
 		gross_margin=stock.financial_statement.loc['Cost of Revenue'][-4:].values/stock.financial_statement.loc['Total Revenue'][-4:].sort_values#we use last 4 years to build a model
-		gross_margin=np.flip(gross_margin)																										#reverse the order of the years
+		gross_margin=np.flip(gross_margin)																					#reverse the order of the years
 		gross_margin=gross_margin.tolist()		
 		popt, pcov = curve_fit(gross_margin_model, revenue, gross_margin)
 		COGS_forecast=list()
 		for rev in revenue_forecast:
-			COGS_forecast.append(gross_margin_model(rev,popt[0],popt[1],popt[2])*rev)															#we forecast cost based on forecasted revenue
+			COGS_forecast.append(gross_margin_model(rev,popt[0],popt[1],popt[2])*rev)										#we forecast cost based on forecasted revenue
 		dfforecast.loc['- Cost of Revenue']=COGS_forecast
 	except:
 		print("\nno Cost of Revenue found")
@@ -313,7 +314,7 @@ def free_cash_flow(stock, WACC):
 		SGnA=(stock.financial_statement.loc['Selling General and Administrative']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
 	except:
 		SGnA=0
-	if RnD + SGnA==0:																															#This means that we don't have the breakdown for SGnA and RnD
+	if RnD + SGnA==0:																										#This means that we don't have the breakdown for SGnA and RnD
 		try:
 			TOE=(stock.financial_statement.loc['Total Operating Expenses']/stock.financial_statement.loc['Total Revenue']).mean(axis=0)
 		except:
@@ -330,7 +331,7 @@ def free_cash_flow(stock, WACC):
 	 
 
 	#5)-D&A
-	#we can go more fancy and forecast balance sheet and estimate D&A but for now let's assume D&A is proportional to salesand capex remains the same
+	#There are more sophisticated way to forecast balance sheet and estimate D&A but for now let's assume D&A is proportional to salesand capex remains the same
 	#to estimate D&A we should recreate balance sheet with days sales outstanding, inventory turnover ratio, number of days payables
 	#https://www.wallstreetprep.com/knowledge/guide-balance-sheet-projections/
 	try:
@@ -386,21 +387,19 @@ def free_cash_flow(stock, WACC):
 
 def main():
 	
-	#index=import_data.market_index("^GDAXI")
-
-	#ICO=SAP.financial_statement.loc['Income Before Tax'].iat[0]/SAP.financial_statement.loc['Interest Expense'].iat[0]
-	#syntetic_rating(ICO,Total.summary.loc['Market Cap'].iat[0])
-	#costofdebt=costofdebt(ICO,SAP.summary.loc['Market Cap'].iat[0],"SAP",5)
-	#print(DAX.historical_data)
-	#print(SAP.historical_data)
-	#cofd=costofdebt(ICO,SAP.summary.loc['Market Cap'].iat[0],"SAP",5)
-	#beta(DAX.historical_data,SAP.historical_data,'M')
+	#index=import_data.market_index("^FCHI")
+	#stock=import_data.company_data("BNP.PA")
+	#WACC=costofcapital(get_exchange(index.ticker), index, stock)
+	#EV=free_cash_flow(stock,WACC)*1000
+	#share_value=EV/stock.shares_outstanding
+	#beta(index,stock)
 	#print(market_return(DAX.historical_data))
 	#costofequity("EU",5,DAX.historical_data,SAP.historical_data,'M')
 	#taxrate(SAP.financial_statement)
-	pd.set_option('precision', 2)																					#format float dataframe with 2 significant digits
 	
-	import_data.list_market_index()																						#initializes index data
+	pd.set_option('precision', 2)																								#format float dataframe with 2 significant digits
+	
+	import_data.list_market_index()																								#initializes index data
 
 	df_result=pd.DataFrame(index=[],columns=[
 		'Sector', 'Industry', 'Cost of Debt',
@@ -408,7 +407,7 @@ def main():
 		'Beta is fallback', 'taxrate', 'Entreprise Value', 
 		'Share Value', 'Share Price', 'Potential Gain/Loss'
 		])
-	index=import_data.market_index("^DJI")																				#Dow Jones
+	index=import_data.market_index("^DJI")																						#Dow Jones
 
 	
 	for row in import_data.NYSE_Arca_Major_Market_Index.iterrows():
@@ -427,8 +426,8 @@ def main():
 		except:
 			print("Impossible to value " + row[1][1])
 	
-	
-	index=import_data.market_index("^GSPC")																				#S&P500
+	'''
+	index=import_data.market_index("^GSPC")																						#S&P500
 	for row in import_data.List_of_SP_500_companies.iterrows():
 		try: 
 			stock=import_data.company_data(row[1][1])
@@ -446,7 +445,7 @@ def main():
 			print("Impossible to value " + row[1][1])
 	print(df_result.sort_values(by=['Sector', 'Industry']))
 	
-	index=import_data.market_index("^IXIC")																				#NASDAQ Composite
+	index=import_data.market_index("^IXIC")																						#NASDAQ Composite
 	for row in import_data.NASDAQ_100.iterrows():
 		try:
 			stock=import_data.company_data(row[1][1])
@@ -465,7 +464,7 @@ def main():
 	print(df_result.sort_values(by=['Sector', 'Industry']))
 
 
-	index=import_data.market_index("^FCHI")																				#CAC40
+	index=import_data.market_index("^FCHI")																						#CAC40
 	for row in import_data.CAC_40.iterrows():
 		try:
 			stock=import_data.company_data(row[1][1])
@@ -483,7 +482,7 @@ def main():
 			print("Impossible to value " + row[1][1])
 	print(df_result.sort_values(by=['Sector', 'Industry']))
 	
-	index=import_data.market_index("^GDAXI")																			#DAX
+	index=import_data.market_index("^GDAXI")																					#DAX
 	for row in import_data.DAX.iterrows():
 		try:
 			stock=import_data.company_data(row[1][1])
@@ -502,7 +501,7 @@ def main():
 	print(df_result.sort_values(by=['Sector', 'Industry']))
 	
 
-	index=import_data.market_index("UKXNUK.L")																			#FTSE
+	index=import_data.market_index("UKXNUK.L")																					#FTSE
 	for row in import_data.FTSE_100_Index.iterrows():
 		try:
 			stock=import_data.company_data(row[1][1])
@@ -520,7 +519,7 @@ def main():
 			print("Impossible to value " + row[1][1])
 	print(df_result.sort_values(by=['Sector', 'Industry']))
 	
-	index=import_data.market_index("^RUT")																				#Russell_1000_Index
+	index=import_data.market_index("^RUT")																						#Russell_1000_Index
 	for row in import_data.Russell_1000_Index.iterrows():
 		try:
 			stock=import_data.company_data(row[1][1])
@@ -537,10 +536,10 @@ def main():
 		except:
 			print("Impossible to value " + row[1][1])
 	print(df_result.sort_values(by=['Sector', 'Industry']))
-
+	'''
 	print("\nResult for NYSE:")
 	print(import_data.NYSE_Arca_Major_Market_Index.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
-
+'''
 	print("\nResult for S&P500:")
 	print(import_data.List_of_SP_500_companies.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))	
 	
@@ -558,6 +557,6 @@ def main():
 
 	print("\nResult for Russell 1000 Index:")
 	print(import_data.Russell_1000_Index.set_index('Ticker').join(df_result, how='left').sort_values(by=['Sector', 'Industry']))
-	
+'''
 if __name__ == "__main__":
 	main()

@@ -8,6 +8,7 @@ import datetime
 import random
 import bs4 as bs
 from selenium import webdriver
+from selenium.webdriver.support.ui import Select
 import io
 
 def summary(Ticker):
@@ -23,7 +24,7 @@ def summary(Ticker):
 			df=df.append(dfread[i])
 		df=df.set_index(0, inplace=False)
 		try :
-			df.loc['Market Cap'].iat[0]=df.loc['Market Cap'].iat[0].replace("M","*1000000")				#Convert million
+			df.loc['Market Cap'].iat[0]=df.loc['Market Cap'].iat[0].replace("M","*1000000")				#Convert million	
 			df.loc['Market Cap'].iat[0]=df.loc['Market Cap'].iat[0].replace("B","*1000000000")			#Convert billion
 			df.loc['Market Cap'].iat[0]=df.loc['Market Cap'].iat[0].replace("T","*1000000000000")		#Convert trillion
 		except:
@@ -74,15 +75,15 @@ def historical_data(Ticker, days):
 		    "download.prompt_for_download": False,
 		    "download.directory_upgrade": True#,
 		})
-		driver = webdriver.Chrome(chrome_options=options)
+		driver = webdriver.Chrome(options=options)
 		crumb = None
 		driver.get(URLhistory)
 		time.sleep(1)
 		button = driver.find_element_by_name('agree') 												#agree to GDPR prompt
 		button.click()
 		time.sleep(3)
-		#button = driver.find_element_by_xpath("// a[. // span[text() = 'Download Data']]")
-		button = driver.find_element_by_xpath("// a[. // span[text() = 'Download Data']]")
+		#button = driver.find_element_by_xpath("// a[. // span[text() = 'Download Data']]") 		#outdated, doesn't work anymore
+		button = driver.find_element_by_xpath("//*[@id=\"Col1-1-HistoricalDataTable-Proxy\"]/section/div[1]/div[2]/span[2]/a")
 		time.sleep(2)
 		link = button.get_attribute("href")
 		print(link)
@@ -112,7 +113,7 @@ def profile(Ticker):
 		df=pd.read_pickle("./data/profile.pkl")												
 	except:	
 		print("Data doesn't exist, importing...")
-		df=pd.DataFrame(index=[0], columns=column)
+		df=pd.DataFrame(index=[], columns=column)
 		
 	if df.index.isin([Ticker]).any():																##check if the value exists
 		print("The industry and sector for this ticker is already known")							#we don't want to scrap yahoo if we already saved the data localy
@@ -144,7 +145,7 @@ def profile(Ticker):
 
 	#//*[@id="Col1-0-Profile-Proxy"]/section/div[1]/div/div/p[2]/span[2]
 
-def financial_statement(Ticker,statement):
+def financial_statement_old(Ticker,statement):
 	#all numbers are in 1000
 	#we could also get the data from simfin.com
 	try:
@@ -161,7 +162,9 @@ def financial_statement(Ticker,statement):
 		r= requests.get(URL)
 		data=r.text
 		soup=bs.BeautifulSoup(data,'lxml')#html.parser')
-		container=soup.findAll("div", class_='D(tbr)')					
+
+		container=soup.findAll("div", class_='D(tbr)')	
+		print(container)				
 		for table_data in container[0].find_all('div', class_='D(ib)'):								#initialize header
 			column.append(table_data.text)
 
@@ -185,7 +188,94 @@ def financial_statement(Ticker,statement):
 		time.sleep(random.random())
 	print("\n"+statement + " for "+ Ticker +" : " )
 	print(df)	
-	return(df)			
+	return(df)		
+
+def financial_statement(Ticker,statement):
+	#all numbers are in 1000
+	#we could also get the data from simfin.com
+	try:
+		df=pd.read_pickle("./data/"+statement+"_"+Ticker+".pkl")									#we don't want to scrap yahoo if we already saved the data localy	
+	except:	
+		print("Data doesn't exist, importing...")
+		column=[]
+		if statement== 'financials':
+			URL="https://finance.yahoo.com/quote/"+Ticker+"/financials"
+		elif statement=='balance-sheet':
+			URL="https://finance.yahoo.com/quote/"+Ticker+"/balance-sheet"
+		elif statement=='cash-flow':
+			URL="https://finance.yahoo.com/quote/"+Ticker+"/cash-flow"
+		options = webdriver.ChromeOptions()
+		options.add_experimental_option("prefs", {
+		    #"download.default_directory": r"yahoo_data",
+		    "download.prompt_for_download": False,
+		    "download.directory_upgrade": True#,
+		})
+		driver = webdriver.Chrome(options=options)
+		driver.get(URL)
+		time.sleep(1)
+		button = driver.find_element_by_name('agree') 												#agree to GDPR prompt
+		button.click()
+		time.sleep(3)
+		drop_downs = driver.find_elements_by_class_name('tgglBtn')
+		for drop_down in drop_downs:
+			drop_down.click()																		#This will just expend the first level but it is ok for now
+			time.sleep(1)
+
+		soup=bs.BeautifulSoup(driver.page_source, 'lxml')
+		container=soup.findAll("div", class_='D(tbr)')					
+		for table_data in container[0].find_all('div', class_='D(ib)'):								#initialize header
+			column.append(table_data.text)
+
+		df=pd.DataFrame(index=[], columns=column)													#create empty dataframe with header
+		for i in range(1,len(container)):															#we loop for each row of the table starting with row 1 (first row after header)
+			j=0
+			for col in container[i].find_all('div', class_='D(tbc)'):								#we loop for each column
+				#print("i: "+str(i)+"   j: "+str(j)+"    text: "+col.text)
+				if j==0:																			#this is the first column, therefore we want to copy it as text
+					df=df.append([{'Breakdown': col.text}],ignore_index=True)						#create a new ligne and populate first column
+				else:																				#this should be a numerical value
+					try:
+						df.iloc[-1,j]=float(col.text.replace(',','')) 								#populating the first non valid dataset and convert it to float
+					except:
+						df.iloc[-1,j]='NaN'
+				j=j+1
+		df=df.set_index('Breakdown', inplace=False)													#set first column as index
+		#df=df.drop(['NaN'])
+		df.to_pickle("./data/"+statement+"_"+Ticker+".pkl")											#save scrapped data
+		time.sleep(random.random())
+		driver.close()
+	print("\n"+statement + " for "+ Ticker +" : " )
+	print(df)	
+	return(df)	
+
+def get_options_date(Ticker):
+	try:
+		df=pd.read_pickle("./data/options_"+Ticker+".pkl")											#we don't want to scrap yahoo if we already saved the data localy	
+	except:	
+		URL="https://finance.yahoo.com/quote/"+Ticker+"/options"
+		options = webdriver.ChromeOptions()
+		options.add_experimental_option("prefs", {
+		    #"download.default_directory": r"yahoo_data",
+		    "download.prompt_for_download": False,
+		    "download.directory_upgrade": True#,
+		})
+		driver = webdriver.Chrome(options=options)
+		driver.get(URL)
+		time.sleep(1)
+		button = driver.find_element_by_name('agree') 												#agree to GDPR prompt
+		button.click()
+		time.sleep(10)
+		#date_list=driver.find_element_by_xpath("//*[@id=\"Col1-1-OptionContracts-Proxy\"]/section/div/div[1]/select")
+		#date_list = [x for x in driver.find_elements_by_xpath("//*[@id=\"Col1-1-OptionContracts-Proxy\"]/section/div/div[1]")]
+		date_list = [x for x in driver.find_elements_by_xpath("//*[@id=\"Col1-1-OptionContracts-Proxy\"]/section/div/div[1]/select/option")]
+		time.sleep(1)
+		#date_list.click()
+		df=pd.DataFrame(index=[], columns=['Date_code'])
+		for element in date_list:
+			df.loc[element.get_attribute("text")]=element.get_attribute("value")
+		print(df)
+
+
 
 def options(Ticker):
 	try:
@@ -285,7 +375,7 @@ def list_market_index():
 			print("Data doesn't exist, importing...")
 			URL="https://en.wikipedia.org/wiki/"+ind
 			dfread=pd.read_html(URL, header=0)
-			df=pd.DataFrame(index=[0], columns=column)												#empty dataframe
+			df=pd.DataFrame(index=[], columns=column)												#empty dataframe
 			if ind=="NYSE_Arca_Major_Market_Index":													#we populate the dataframe
 				df=dfread[1][['Company','Symbol']].copy()
 				df=df.rename(columns={"Symbol": "Ticker"})
@@ -310,7 +400,7 @@ def list_market_index():
 			elif ind=="Russell_1000_Index":															#we populate the dataframe
 				df=dfread[3][['Company','Ticker']].copy()
 				Russell_1000_Index=df
-			df=df.set_index('Contract Name', inplace=False)
+			df=df.set_index('Company', inplace=False)
 			df.to_pickle("./data/"+ind+".pkl")
 			time.sleep(random.random())		
 		else:
@@ -390,8 +480,8 @@ class company_data:
 
 def main():
 	#Total=company_data("TOT")
-	profile("TOT")
-
+	#profile("TOT")
+	company_data("TSLA")
 
 if __name__ == "__main__":
 	 main() 

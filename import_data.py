@@ -45,8 +45,8 @@ def key_statistics(Ticker):
 	except:	
 		URL="https://finance.yahoo.com/quote/"+Ticker+"/key-statistics"
 		dfread=pd.read_html(URL)
-		df=dfread[0]
-		for i in range(1,len(dfread)):																#merging datafrane
+		df=dfread[1]
+		for i in range(2,len(dfread)):																#merging datafrane
 			df=df.append(dfread[i])
 		df=df.set_index(0, inplace=False)
 		df.to_pickle("./data/key_statistics_"+Ticker+".pkl")										#save scrapped data
